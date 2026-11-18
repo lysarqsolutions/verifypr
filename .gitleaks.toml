@@ -1,0 +1,13 @@
+title = "VerifyPR secret scan"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic, documented example secrets used only by detector tests and docs"
+paths = [
+  '''tests/fixtures/secrets/''',
+]
+regexes = [
+  '''AKIAIOSFODNN7EXAMPLE''',
+]

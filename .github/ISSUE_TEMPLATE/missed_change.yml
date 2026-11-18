@@ -1,0 +1,29 @@
+name: Missed change
+description: VerifyPR missed a change it should have flagged
+labels: [missed-change, detector]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! Confirmed reports become test cases. **Please share only a small, made-up example** —
+        never real company code, customer data, or secrets.
+  - type: textarea
+    id: example
+    attributes:
+      label: Minimal made-up example of the change
+      description: A tiny diff or before/after snippet VerifyPR should have flagged.
+      render: diff
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should VerifyPR have said?
+      placeholder: 'e.g. "Managers can no longer see the Reports menu"'
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: VerifyPR version
+      placeholder: "output of: verifypr --version"

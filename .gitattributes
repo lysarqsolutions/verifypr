@@ -1,0 +1,12 @@
+# Normalize line endings for normal source files.
+* text=auto
+
+# Test fixtures must keep their exact bytes (CRLF/LF, BOMs, encodings) because the
+# hygiene detectors are tested against them. Never let git rewrite them.
+tests/fixtures/** -text
+
+# Binary files
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary

@@ -1,0 +1,29 @@
+name: Bug report
+description: VerifyPR crashed or behaved unexpectedly
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you ran, what you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output or error message
+      description: Remove any secrets, API keys, private code, or company names first.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: VerifyPR version
+      placeholder: "output of: verifypr --version"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and Python version
+      placeholder: "e.g. Windows 11, Python 3.12"

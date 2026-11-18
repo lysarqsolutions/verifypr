@@ -1,0 +1,79 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "verifypr"
+dynamic = ["version"]
+description = "Check that a pull request changed only what it was supposed to, what behavior might have changed, and what to verify before approving."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "VerifyPR contributors" }]
+keywords = ["pull-request", "code-review", "ai-agents", "scope", "git"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pydantic>=2.6,<3",
+    "typer>=0.12,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.3,<10",
+    "pytest-cov>=7,<8",
+    "ruff>=0.6,<1",
+    "mypy>=1.10,<2",
+    "pip-audit>=2.7,<3",
+    "pip-licenses>=4.4,<6",
+]
+
+[project.scripts]
+verifypr = "verifypr.cli:main"
+
+[tool.hatch.version]
+path = "src/verifypr/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/verifypr"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "PT"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["src", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "live: calls a real LLM or external service; skipped unless VERIFYPR_LIVE_TESTS=1",
+]
+
+[tool.coverage.run]
+source = ["verifypr"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true

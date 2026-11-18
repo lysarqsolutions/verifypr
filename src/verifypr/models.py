@@ -1,0 +1,124 @@
+"""Core data models shared by every pipeline stage.
+
+Public interface: ``Hunk``, ``Evidence``, ``Finding``, ``Report`` and the enums
+``ChangeKind``, ``Severity``, ``Classification``, ``Verdict``, ``InputLevel``.
+Internal names live here; user-facing wording lives in ``verifypr.render.labels``.
+"""
+
+from __future__ import annotations
+
+from enum import Enum
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+SCHEMA_VERSION = "1"
+
+
+class ChangeKind(str, Enum):
+    ADD = "add"
+    MODIFY = "modify"
+    DELETE = "delete"
+    RENAME = "rename"
+    MOVE = "move"
+    MODE_CHANGE = "mode_change"
+    BINARY = "binary"
+
+
+class Severity(str, Enum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+    @property
+    def weight(self) -> int:
+        return {"high": 3, "medium": 2, "low": 1}[self.value]
+
+
+class Classification(str, Enum):
+    INTENDED = "intended"
+    SUPPORTING = "supporting"
+    UNINTENDED = "unintended"
+    UNCLEAR = "unclear"
+
+
+class Verdict(str, Enum):
+    PASS = "pass"
+    WARN = "warn"
+    FAIL = "fail"
+
+
+class InputLevel(str, Enum):
+    AUTO = "auto"
+    DESCRIBE = "describe"
+    REQUIREMENTS = "requirements"
+
+
+class _Model(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+
+class Hunk(_Model):
+    """One contiguous change in one file. ``id`` must be stable across runs."""
+
+    id: str = Field(min_length=1)
+    file_path: str = Field(min_length=1)
+    old_path: str | None = None
+    change_kind: ChangeKind
+    old_start: int = Field(ge=0)
+    old_lines: int = Field(ge=0)
+    new_start: int = Field(ge=0)
+    new_lines: int = Field(ge=0)
+    language: str | None = None
+    added: tuple[str, ...] = ()
+    removed: tuple[str, ...] = ()
+
+
+class Evidence(_Model):
+    """Where a finding comes from: a file and an inclusive line range."""
+
+    file_path: str = Field(min_length=1)
+    start_line: int = Field(ge=1)
+    end_line: int = Field(ge=1)
+    snippet: str | None = None
+
+    @model_validator(mode="after")
+    def _check_range(self) -> Evidence:
+        if self.end_line < self.start_line:
+            raise ValueError("end_line must be >= start_line")
+        return self
+
+
+class Finding(_Model):
+    """A single issue. ``problem_id`` (U-number) is internal and never shown to users."""
+
+    id: str = Field(min_length=1)
+    problem_id: str = Field(pattern=r"^U\d+$")
+    category: str = Field(min_length=1)
+    severity: Severity
+    confidence: int = Field(ge=0, le=100)
+    evidence: tuple[Evidence, ...] = Field(min_length=1)
+    title: str = Field(min_length=1, description="Plain-language one-liner for users.")
+    why: str = Field(min_length=1, description="One-sentence plain-language explanation.")
+    check_item: str | None = Field(
+        default=None, description="Wording for the 'Please check before approving' list."
+    )
+    classification: Classification | None = None
+
+    @property
+    def priority(self) -> int:
+        """Ranking key: severity weight x confidence (higher = more important)."""
+        return self.severity.weight * self.confidence
+
+
+class Report(_Model):
+    schema_version: str = SCHEMA_VERSION
+    verdict: Verdict
+    input_level: InputLevel = InputLevel.AUTO
+    compared: str = Field(min_length=1, description="Plain description of what was compared.")
+    findings: tuple[Finding, ...] = ()
+    skipped: tuple[str, ...] = ()
+    ai_used: bool = False
+
+    def top_issues(self, limit: int = 3) -> list[Finding]:
+        """Highest-priority findings first; ties keep their original order."""
+        return sorted(self.findings, key=lambda f: f.priority, reverse=True)[:limit]

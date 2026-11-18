@@ -1,0 +1,35 @@
+name: False alarm
+description: VerifyPR flagged a change that was actually fine
+labels: [false-alarm, detector]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! Confirmed reports become test cases. **Please share only a small, made-up example** —
+        never real company code, customer data, or secrets.
+  - type: input
+    id: flag
+    attributes:
+      label: What did VerifyPR say?
+      placeholder: 'e.g. "A test was changed to pass instead of the code being fixed"'
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Minimal made-up example of the change
+      description: A tiny diff or before/after snippet that reproduces it.
+      render: diff
+    validations:
+      required: true
+  - type: textarea
+    id: why-fine
+    attributes:
+      label: Why is this change fine?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: VerifyPR version
+      placeholder: "output of: verifypr --version"
