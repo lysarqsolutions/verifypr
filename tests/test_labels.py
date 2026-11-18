@@ -51,3 +51,9 @@ def test_headlines() -> None:
 def test_rules_only_clean_result_never_says_looks_good() -> None:
     assert headline(Verdict.PASS, 0, ai_used=False) == "No problems found by basic checks"
     assert "Looks good" in headline(Verdict.PASS, 0, ai_used=True)
+
+
+@pytest.mark.parametrize("verdict", [Verdict.WARN, Verdict.FAIL])
+def test_warn_or_fail_with_no_issues_is_rejected(verdict: Verdict) -> None:
+    with pytest.raises(ValueError, match="needs at least one issue"):
+        headline(verdict, 0, ai_used=True)

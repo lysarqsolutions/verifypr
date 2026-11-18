@@ -42,6 +42,8 @@ def classification_label(classification: Classification) -> str:
 
 def headline(verdict: Verdict, issue_count: int, *, ai_used: bool) -> str:
     """One honest headline sentence. Rules-only clean results never say 'Looks good'."""
+    if verdict is not Verdict.PASS and issue_count < 1:
+        raise ValueError(f"a {verdict.value} verdict needs at least one issue")
     if verdict is Verdict.FAIL:
         noun = "issue" if issue_count == 1 else "issues"
         return f"Don't merge yet — {issue_count} serious {noun}"

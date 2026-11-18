@@ -13,6 +13,12 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Bash everywhere (including Windows) with `set -eo pipefail`, so every command in a
+# multi-line step is checked. PowerShell would only check the last command's exit code.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   test:
     name: test (${{ matrix.os }}, py${{ matrix.python }})
@@ -66,9 +72,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Pinned by digest (tag v8.28.0). Dependabot can't update images inside `run:`;
+      # update manually as described in CONTRIBUTING.md.
       - name: gitleaks
         run: >-
-          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.28.0
+          docker run --rm -v "$PWD:/repo"
+          ghcr.io/gitleaks/gitleaks@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854
           dir /repo --config /repo/.gitleaks.toml --redact --no-banner
 
   dco:

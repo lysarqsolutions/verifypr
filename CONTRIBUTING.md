@@ -39,6 +39,10 @@ This adds `Signed-off-by: Your Name <you@example.com>`, certifying you wrote the
 - **Plain language.** New findings need a plain-language title, a one-sentence "why", and a "Please check" wording. Internal names (U-numbers, "hunk", "contract") must never appear in user-facing output.
 - **Conventional Commits:** `feat:`, `fix:`, `docs:`, `test:`, `chore:`.
 
+## Maintainers: updating the secret-scanner image
+
+GitHub Actions are updated by Dependabot, but the gitleaks container in `.github/workflows/ci.yml` is pinned by digest inside a `run:` command, so Dependabot can't see it. To update it, pick a new release tag at least two weeks old, look up its digest on `ghcr.io/gitleaks/gitleaks`, and replace both the digest and the tag in the comment above it.
+
 ## Reporting detector mistakes
 
 Use the **False alarm** or **Missed change** issue templates with a small made-up example. Confirmed reports become test cases.
