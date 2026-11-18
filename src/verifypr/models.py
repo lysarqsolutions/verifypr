@@ -22,6 +22,7 @@ class ChangeKind(str, Enum):
     MOVE = "move"
     MODE_CHANGE = "mode_change"
     BINARY = "binary"
+    SUBMODULE = "submodule"
 
 
 class Severity(str, Enum):
@@ -71,6 +72,28 @@ class Hunk(_Model):
     language: str | None = None
     added: tuple[str, ...] = ()
     removed: tuple[str, ...] = ()
+    added_at: tuple[int, ...] = Field(
+        default=(), description="New-file line number per added line."
+    )
+    removed_at: tuple[int, ...] = Field(
+        default=(), description="Old-file line number per removed line."
+    )
+
+
+class FileChange(_Model):
+    """File-level facts about one changed file (its hunks are separate ``Hunk`` objects)."""
+
+    path: str = Field(min_length=1)
+    old_path: str | None = None
+    change_kind: ChangeKind
+    language: str | None = None
+    old_mode: str | None = None
+    new_mode: str | None = None
+    binary: bool = False
+    untracked: bool = False
+    lfs_pointer: bool = False
+    added_lines: int = Field(default=0, ge=0)
+    removed_lines: int = Field(default=0, ge=0)
 
 
 class Evidence(_Model):
@@ -103,6 +126,14 @@ class Finding(_Model):
         default=None, description="Wording for the 'Please check before approving' list."
     )
     classification: Classification | None = None
+    critical: bool = Field(
+        default=False,
+        description="Clear rule-based critical finding (e.g. committed secret); may FAIL in "
+        "any mode.",
+    )
+    inferred: bool = Field(
+        default=False, description="Depends on inferred intent: capped at WARN in Auto mode."
+    )
 
     @property
     def priority(self) -> int:
@@ -115,10 +146,29 @@ class Report(_Model):
     verdict: Verdict
     input_level: InputLevel = InputLevel.AUTO
     compared: str = Field(min_length=1, description="Plain description of what was compared.")
+    base: str | None = Field(default=None, description="What the changes were compared with.")
     findings: tuple[Finding, ...] = ()
     skipped: tuple[str, ...] = ()
+    notes: tuple[str, ...] = Field(default=(), description="Friendly notes, e.g. fallbacks used.")
     ai_used: bool = False
+    file_count: int = Field(default=0, ge=0)
+    allowed_count: int = Field(default=0, ge=0, description="Findings suppressed by allow rules.")
+    attention_count: int = Field(
+        default=0, ge=0, description="Findings that made the verdict WARN or FAIL."
+    )
+
+    def ranked(self) -> list[Finding]:
+        """All findings, highest priority first; ties keep their original order."""
+        return sorted(self.findings, key=lambda f: f.priority, reverse=True)
 
     def top_issues(self, limit: int = 3) -> list[Finding]:
         """Highest-priority findings first; ties keep their original order."""
-        return sorted(self.findings, key=lambda f: f.priority, reverse=True)[:limit]
+        return self.ranked()[:limit]
+
+    def check_items(self, limit: int = 10) -> list[str]:
+        """Deduplicated 'Please check before approving' items, most important first."""
+        items: list[str] = []
+        for finding in self.ranked():
+            if finding.check_item and finding.check_item not in items:
+                items.append(finding.check_item)
+        return items[:limit]

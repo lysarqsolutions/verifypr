@@ -17,6 +17,15 @@ DEFAULT_COMMANDS: list[list[str]] = [
     [],
     ["--version"],
     ["--help"],
+    ["--verbose"],
+    ["check"],
+    ["check", "--format", "json"],
+    ["check", "--format", "markdown"],
+    ["check", "--staged"],
+    ["check", "--committed-only"],
+    ["check", "--head", "feature"],
+    ["diff"],
+    ["diff", "--json"],
 ]
 
 
@@ -30,7 +39,7 @@ def test_default_command_is_read_only(
 
     result = CliRunner().invoke(app, args)
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code in (0, 1, 2), result.output
     assert_unchanged(before, snapshot(repo))
 
 

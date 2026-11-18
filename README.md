@@ -1,6 +1,22 @@
 # VerifyPR
 
-> **Status: pre-alpha (Phase 0 — project scaffold).** Nothing to use yet. Follow along or contribute!
+> **Status: pre-alpha (Phase 1 — rule-based checks).** Usable for early testing; expect changes.
+
+## Try it
+
+```bash
+pip install -e .
+```
+
+```bash
+verifypr
+```
+
+Run it inside your project folder. It compares your branch, unsaved changes, and new files with `main` (or `master`/`develop`) and prints a short summary plus a "Please check before approving" list. Add `--verbose` to see everything, or `--format markdown` / `--format json`.
+
+Exit codes: `0` looks fine · `1` needs your attention · `2` don't merge yet · `3` couldn't run.
+
+**What gets sent where:** nothing. This version runs only local rule-based checks and makes no network calls.
 
 **VerifyPR answers whether an AI coding agent changed only what it was supposed to change, what existing behavior might have changed, and what reviewers should check before approving.**
 
