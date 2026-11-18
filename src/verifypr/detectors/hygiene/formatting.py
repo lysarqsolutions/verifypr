@@ -10,7 +10,7 @@ import re
 from collections import defaultdict
 from enum import Enum
 
-from verifypr.detectors.base import DetectorContext, hunk_evidence
+from verifypr.detectors.base import DetectorContext, file_evidence, hunk_evidence
 from verifypr.models import Evidence, Finding, Hunk, Severity
 
 _IMPORT_RE = re.compile(
@@ -28,8 +28,26 @@ class HunkKind(str, Enum):
     REAL = "real"
 
 
+# Languages where leading indentation changes meaning (moving a line in or out of a block).
+INDENT_SENSITIVE = {"python", "yaml", "make"}
+
+
 def _squash(lines: tuple[str, ...]) -> str:
     return "".join("".join(lines).split())
+
+
+def _same_ignoring_inner_spaces(removed: tuple[str, ...], added: tuple[str, ...]) -> bool:
+    """Whitespace-only, but leading indentation must be identical line by line."""
+    old = [r.rstrip("\r") for r in removed if r.strip()]
+    new = [a.rstrip("\r") for a in added if a.strip()]
+    if len(old) != len(new):
+        return False
+    for o, n in zip(old, new, strict=True):
+        indent_o = o[: len(o) - len(o.lstrip())]
+        indent_n = n[: len(n) - len(n.lstrip())]
+        if indent_o != indent_n or "".join(o.split()) != "".join(n.split()):
+            return False
+    return True
 
 
 def classify_hunk(hunk: Hunk) -> HunkKind:
@@ -48,7 +66,10 @@ def classify_hunk(hunk: Hunk) -> HunkKind:
         and removed[1:] == added[1:]
     ):
         return HunkKind.BOM
-    if _squash(removed) == _squash(added):
+    if hunk.language in INDENT_SENSITIVE:
+        if _same_ignoring_inner_spaces(removed, added):
+            return HunkKind.WHITESPACE
+    elif _squash(removed) == _squash(added):
         return HunkKind.WHITESPACE
     strip_r = [r.strip() for r in removed if r.strip()]
     strip_a = [a.strip() for a in added if a.strip()]
@@ -103,7 +124,7 @@ def _formatting_findings(ctx: DetectorContext) -> list[Finding]:
             continue
         kinds = [classify_hunk(h) for h in hunks]
         noise = [(h, k) for h, k in zip(hunks, kinds, strict=True) if k is not HunkKind.REAL]
-        if not noise:
+        if not noise or ctx.allowed("formatting", change.path):
             continue
         if len(noise) == len(hunks):
             dominant = max(set(kinds), key=kinds.count)
@@ -132,7 +153,7 @@ def _formatting_findings(ctx: DetectorContext) -> list[Finding]:
             Finding(
                 id="formatting:mixed",
                 problem_id="U3",
-                category="formatting",
+                category="formatting_mixed",
                 severity=Severity.LOW,
                 confidence=70,
                 evidence=tuple(mixed),
@@ -163,7 +184,7 @@ def _mode_findings(ctx: DetectorContext) -> list[Finding]:
                 category="file_mode",
                 severity=Severity.MEDIUM if executable else Severity.LOW,
                 confidence=95,
-                evidence=(Evidence(file_path=change.path, start_line=1, end_line=1),),
+                evidence=(file_evidence(change.path),),
                 title=title,
                 why=f"The file's permissions changed from {change.old_mode} to "
                 f"{change.new_mode}, which is easy to miss in a review.",

@@ -234,3 +234,70 @@ def test_u6_build_output_junk_and_binaries() -> None:
     assert len(findings["artifacts:build"].evidence) == 2
     assert findings["artifacts:junk"].severity is Severity.LOW
     assert [e.file_path for e in findings["artifacts:binary"].evidence] == ["tools/helper.exe"]
+
+
+# ---- review fixes -----------------------------------------------------------------------
+def test_u3_indentation_is_meaningful_in_python_and_yaml() -> None:
+    [dedent] = changeset(modify_diff("app.py", "    delete_all()\n", "delete_all()\n")).hunks
+    assert classify_hunk(dedent) is HunkKind.REAL
+    [inner] = changeset(modify_diff("app.py", "    x=1\n", "    x = 1\n")).hunks
+    assert classify_hunk(inner) is HunkKind.WHITESPACE
+    [yaml] = changeset(modify_diff("ci.yml", "  run: test\n", "    run: test\n")).hunks
+    assert classify_hunk(yaml) is HunkKind.REAL
+    [js] = changeset(modify_diff("app.js", "    go()\n", "go()\n")).hunks
+    assert classify_hunk(js) is HunkKind.WHITESPACE
+
+
+def test_u3_mixed_formatting_is_informational() -> None:
+    from verifypr.intent.contract import Tolerances
+    from verifypr.models import InputLevel, Verdict
+    from verifypr.verdict import decide
+
+    diff = (
+        "diff --git a/m.py b/m.py\n--- a/m.py\n+++ b/m.py\n"
+        "@@ -1 +1 @@\n-x=1\n+x = 1\n@@ -10 +10 @@\n-y = 1\n+y = 2\n"
+    )
+    findings = formatting.detect(ctx(changeset(diff)))
+    assert [f.category for f in findings] == ["formatting_mixed"]
+    assert decide(findings, Tolerances(), InputLevel.AUTO)[0] is Verdict.PASS
+
+
+def test_allow_rules_apply_per_file_inside_groups() -> None:
+    from verifypr.config import AllowRule, Config
+
+    diff = modify_diff("docs/a.md", "a\nb\n", "a\r\nb\r\n") + modify_diff(
+        "src/b.py", "a\nb\n", "a\r\nb\r\n"
+    )
+    context = ctx(
+        changeset(diff), config=Config(allow=(AllowRule(kind="formatting", paths=("docs/**",)),))
+    )
+    [finding] = formatting.detect(context)
+    assert finding.title == "Line endings changed in 1 file"
+    assert [e.file_path for e in finding.evidence] == ["src/b.py"]
+    assert context.suppressed == {("formatting", "docs/a.md")}
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        'token = request.headers.get("Authorization")',
+        'password = form.cleaned_data["password"]',
+        "api_key = settings.API_KEY",
+        "secret = get_secret_from_vault()",
+    ],
+)
+def test_u6_ordinary_code_is_not_a_secret(line: str) -> None:
+    assert artifacts.detect(ctx(changeset(new_file_diff("app.py", line + "\n")))) == []
+
+
+def test_u6_quoted_password_in_code_and_plain_value_in_settings_file() -> None:
+    code = artifacts.detect(ctx(changeset(new_file_diff("db.py", 'password = "hunter2hunter2"\n'))))
+    assert [f.id for f in code] == ["secrets:db.py"]
+    settings = artifacts.detect(
+        ctx(changeset(new_file_diff("config/app.ini", "DB_PASSWORD=hunter2hunter2\n")))
+    )
+    assert [f.id for f in settings] == ["secrets:config/app.ini"]
+    plain_in_code = artifacts.detect(
+        ctx(changeset(new_file_diff("db.py", "DB_PASSWORD=hunter2hunter2\n")))
+    )
+    assert plain_in_code == []

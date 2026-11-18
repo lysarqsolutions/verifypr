@@ -25,6 +25,22 @@ All notable changes to this project are documented here. The format follows
   clones, empty repositories, sparse checkouts, submodules, and Git LFS pointers.
 - Every git call uses `--no-optional-locks`; the read-only test now covers every command.
 
+### Fixed — Phase 1 review
+- Commits made directly on the base branch (e.g. an agent working on `main`) were
+  invisible; VerifyPR now compares with the branch's remote copy, or says clearly that
+  there is none.
+- Indentation changes in Python, YAML and Makefiles are no longer called "only
+  formatting" — they can change behavior.
+- Ordinary code like `token = request.headers.get(...)` is no longer flagged as a
+  secret; plain `key=value` secrets are only matched in settings files (redaction
+  stays strict everywhere).
+- "Formatting mixed in with real changes" is now informational and no longer causes
+  "needs attention".
+- Allow rules work per file inside grouped findings and only count files that were
+  actually hidden.
+- File-level findings no longer show a made-up line number; the "no changes" message
+  no longer repeats itself.
+
 ### Added — Phase 0
 - Phase 0 project scaffold: package layout, core data models (`Hunk`, `Evidence`,
   `Finding`, `Report`), plain-language labels, `verifypr --version`.

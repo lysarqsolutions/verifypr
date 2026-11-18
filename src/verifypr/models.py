@@ -103,6 +103,9 @@ class Evidence(_Model):
     start_line: int = Field(ge=1)
     end_line: int = Field(ge=1)
     snippet: str | None = None
+    file_level: bool = Field(
+        default=False, description="About the whole file; line numbers are not meaningful."
+    )
 
     @model_validator(mode="after")
     def _check_range(self) -> Evidence:

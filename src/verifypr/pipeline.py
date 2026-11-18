@@ -45,8 +45,10 @@ def run_check(request: CheckRequest) -> tuple[Report, ChangeSet]:
     contract = load_review_contract(request.contract_path) if request.contract_path else None
     changes = git.collect(compare)
 
-    findings = run_detectors(DetectorContext(changes=changes, config=config, contract=contract))
+    context = DetectorContext(changes=changes, config=config, contract=contract)
+    findings = run_detectors(context)
     kept, allowed = apply_allow_rules(findings, config.allow)
+    allowed += len(context.suppressed)
     input_level = InputLevel.DESCRIBE if contract else InputLevel.AUTO
     tolerances = contract.tolerances if contract else config.tolerances
     verdict, attention = decide(kept, tolerances, input_level)

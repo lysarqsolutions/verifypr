@@ -26,6 +26,9 @@ def importance(finding: Finding) -> str:
 def where(finding: Finding, limit: int = 3) -> str:
     spots = []
     for ev in finding.evidence[:limit]:
+        if ev.file_level:
+            spots.append(ev.file_path)
+            continue
         lines = (
             f"{ev.start_line}" if ev.start_line == ev.end_line else f"{ev.start_line}-{ev.end_line}"
         )
@@ -38,7 +41,8 @@ def render_text(report: Report, *, verbose: bool = False) -> str:
     out: list[str] = []
     icon = "•" if report.file_count == 0 else STATUS_ICON[report.verdict]
     out.append(f"{icon} {report_headline(report)}")
-    out.append(f"  {report.compared}")
+    if report.file_count:
+        out.append(f"  {report.compared}")
     for note in report.notes:
         out.append(f"  Note: {note}")
     if report.file_count == 0:
@@ -77,9 +81,7 @@ def render_text(report: Report, *, verbose: bool = False) -> str:
         )
     if report.allowed_count:
         n = report.allowed_count
-        out.append(
-            f"{n} {'finding was' if n == 1 else 'findings were'} hidden by your allow rules."
-        )
+        out.append(f"{n} {'item was' if n == 1 else 'items were'} hidden by your allow rules.")
     if not report.ai_used:
         out.append("Only basic rule-based checks ran.")
     return "\n".join(out) + "\n"

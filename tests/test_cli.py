@@ -112,6 +112,14 @@ def test_no_changes_state(repo_dir: Path) -> None:
     assert result.exit_code == 0
     assert "No changes found compared with `main`" in result.output
     assert "verifypr --base <branch>" in result.output
+    assert "Nothing" not in result.output
+    assert "No changes," not in result.output
+
+
+def test_file_level_findings_show_no_fake_line(repo_dir: Path) -> None:
+    _checkpoint_repo(repo_dir)
+    out = runner.invoke(app, ["--repo", str(repo_dir), "--verbose"]).output
+    assert "Where: .env\n" in out  # the "environment file added" finding is file-level
 
 
 def test_errors_are_friendly_with_exit_3(tmp_path: Path) -> None:
@@ -135,7 +143,7 @@ def test_allow_rules_from_config(repo_dir: Path) -> None:
     repo.git("merge", "-q", "main", "-m", "merge")
     out = runner.invoke(app, ["--repo", str(repo_dir), "--verbose"]).output
     assert "Line endings changed" not in out
-    assert "1 finding was hidden by your allow rules." in out
+    assert "1 item was hidden by your allow rules." in out
 
 
 def test_review_contract_forbidden_area(repo_dir: Path, tmp_path: Path) -> None:

@@ -68,6 +68,21 @@ def _is_env_file(path: str) -> bool:
     return (name == ".env" or name.startswith(".env.")) and name not in ENV_SAFE
 
 
+SETTINGS_SUFFIXES = (".ini", ".cfg", ".conf", ".properties", ".yml", ".yaml", ".toml")
+SETTINGS_NAMES = {".npmrc", ".pypirc", ".netrc"}
+
+
+def _is_settings_file(path: str) -> bool:
+    """Settings files hold plain ``key=value`` pairs, so unquoted secrets count there."""
+    name = posixpath.basename(path).lower()
+    return (
+        _is_env_file(path)
+        or name.startswith(".env")
+        or name in SETTINGS_NAMES
+        or name.endswith(SETTINGS_SUFFIXES)
+    )
+
+
 def _secret_findings(ctx: DetectorContext) -> list[Finding]:
     findings: list[Finding] = []
     for change in ctx.changes.files:
@@ -78,7 +93,7 @@ def _secret_findings(ctx: DetectorContext) -> list[Finding]:
         critical = False
         for hunk in ctx.changes.hunks_for(change.path):
             for i, line in enumerate(hunk.added):
-                matches = find_secrets(line)
+                matches = find_secrets(line, loose=_is_settings_file(change.path))
                 if not matches:
                     continue
                 evidence.append(hunk_evidence(hunk, [i]))
@@ -172,14 +187,19 @@ def _artifact_findings(ctx: DetectorContext) -> list[Finding]:
         if not _is_new(change):
             continue
         path = change.path
+        group: str | None = None
         if any_match(BUILD_OUTPUT, path):
-            groups["build"].append(path)
+            group = "build"
         elif any_match(JUNK, path):
-            groups["junk"].append(path)
-        elif change.lfs_pointer:
-            continue
-        elif change.binary and posixpath.splitext(path)[1].lower() not in MEDIA_EXT:
-            groups["binary"].append(path)
+            group = "junk"
+        elif (
+            change.binary
+            and not change.lfs_pointer
+            and posixpath.splitext(path)[1].lower() not in MEDIA_EXT
+        ):
+            group = "binary"
+        if group and not ctx.allowed("artifacts", path):
+            groups[group].append(path)
     findings: list[Finding] = []
     if groups["build"]:
         paths = groups["build"]

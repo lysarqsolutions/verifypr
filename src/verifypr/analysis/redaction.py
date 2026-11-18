@@ -62,29 +62,47 @@ _PATTERNS: tuple[_Pattern, ...] = (
         "stripe_key", "Stripe live key", re.compile(r"\b(?:sk|rk)_live_[A-Za-z0-9]{16,}"), True
     ),
     _Pattern("google_api_key", "Google API key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}"), True),
-    _Pattern(
-        "generic_secret",
-        "password or secret",
-        re.compile(
-            r"(?i)\b(?:api[_-]?key|secret(?:[_-]?key)?|access[_-]?token|auth[_-]?token|token|"
-            r"passwd|password|client[_-]?secret)\b['\"]?\s*[:=]\s*['\"]?(?P<secret>[^\s'\"#,;]{8,})"
-        ),
-        False,
-    ),
+)
+
+# Key names that usually hold secrets, allowing prefixes/suffixes like DB_PASSWORD or
+# stripe_api_key_live.
+_SECRET_KEY = (
+    r"(?i)(?<![A-Za-z0-9])[A-Za-z0-9_-]*?"
+    r"(?:api[_-]?key|secret|access[_-]?token|auth[_-]?token|token|passwd|password|pwd)"
+    r"[A-Za-z0-9_-]*['\"]?\s*[:=]\s*"
+)
+# In code: only a quoted string literal counts (``password = "hunter2"``), so ordinary code
+# such as ``token = request.headers.get(...)`` is not flagged.
+_GENERIC_QUOTED = _Pattern(
+    "generic_secret",
+    "password or secret",
+    re.compile(_SECRET_KEY + r"(['\"])(?P<secret>[^'\"\s]{8,})\1"),
+    False,
+)
+# In settings files (.env, .ini, .properties, YAML…) and for redaction: unquoted values too.
+_GENERIC_LOOSE = _Pattern(
+    "generic_secret",
+    "password or secret",
+    re.compile(_SECRET_KEY + r"['\"]?(?P<secret>[^\s'\"#,;]{8,})"),
+    False,
 )
 
 _PLACEHOLDER = re.compile(
     r"(?i)^(?:\$\{.*\}|\$[A-Z_]+|<.*>|\{\{.*\}\}|x{4,}|\*{4,}|changeme|change_me|"
     r"your[-_].*|example.*|placeholder.*|dummy.*|test.*|none|null|true|false|"
-    r"os\.environ.*|process\.env.*|env\(.*)$"
+    r"os\.environ.*|process\.env.*|env\(.*|settings\..*|config\..*)$"
 )
 
 
-def find_secrets(text: str) -> list[SecretMatch]:
-    """Non-overlapping matches, earlier and more specific patterns first."""
+def find_secrets(text: str, *, loose: bool = False) -> list[SecretMatch]:
+    """Non-overlapping matches, earlier and more specific patterns first.
+
+    ``loose`` also treats unquoted ``key=value`` as a possible secret (settings files,
+    and redaction, where it's better to hide too much than too little).
+    """
     found: list[SecretMatch] = []
     taken: list[tuple[int, int]] = []
-    for pattern in _PATTERNS:
+    for pattern in (*_PATTERNS, _GENERIC_LOOSE if loose else _GENERIC_QUOTED):
         for m in pattern.regex.finditer(text):
             start, end = (
                 (m.start("secret"), m.end("secret")) if "secret" in m.groupdict() else m.span()
@@ -101,6 +119,6 @@ def find_secrets(text: str) -> list[SecretMatch]:
 
 def redact(text: str) -> str:
     out = text
-    for match in sorted(find_secrets(text), key=lambda s: s.start, reverse=True):
+    for match in sorted(find_secrets(text, loose=True), key=lambda s: s.start, reverse=True):
         out = out[: match.start] + f"[REDACTED {match.label}]" + out[match.end :]
     return out

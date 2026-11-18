@@ -183,3 +183,52 @@ def test_crlf_flip_is_visible(repo_dir: Path) -> None:
     repo.write("w.txt", "one\r\ntwo\r\n")
     [hunk] = LocalGit.open(repo_dir).collect(CompareOptions()).hunks
     assert hunk.added == ("one\r", "two\r")
+
+
+def test_agent_commits_on_main_are_compared_with_remote_copy(tmp_path: Path) -> None:
+    origin = Repo(tmp_path / "origin")
+    origin.write("a.txt", "a\n")
+    origin.commit("one")
+    Repo(tmp_path, init=False).git("clone", "-q", (tmp_path / "origin").as_uri(), "work")
+    work = Repo(tmp_path / "work", init=False)
+    work.git("config", "core.autocrlf", "false")
+    work.write(".env", "DEBUG=1\n")
+    work.commit("agent work on main")
+    changes = LocalGit.open(tmp_path / "work").collect(CompareOptions())
+    assert changes.base_label == "origin/main"
+    assert [f.path for f in changes.files] == [".env"]
+    assert changes.compared == "Your branch (1 commit), compared with `origin/main`"
+
+
+def test_on_main_without_remote_copy_says_so(repo_dir: Path) -> None:
+    repo = Repo(repo_dir)
+    repo.write("a.txt", "a\n")
+    repo.commit()
+    repo.write("b.txt", "b\n")
+    repo.commit("work on main")
+    changes = LocalGit.open(repo_dir).collect(CompareOptions())
+    assert any("no remote copy" in n and "--base HEAD~3" in n for n in changes.notes)
+
+
+def test_linked_worktree(repo_dir: Path, tmp_path: Path) -> None:
+    repo = Repo(repo_dir)
+    repo.write("a.txt", "a\n")
+    repo.commit()
+    worktree = tmp_path / "wt"
+    repo.git("worktree", "add", "-q", "-b", "feature", str(worktree))
+    (worktree / "a.txt").write_bytes(b"b\n")
+    changes = LocalGit.open(worktree).collect(CompareOptions())
+    assert [f.path for f in changes.files] == ["a.txt"]
+    assert changes.base_label == "main"
+
+
+def test_case_only_rename(repo_dir: Path) -> None:
+    repo = Repo(repo_dir)
+    repo.write("Readme.md", "hello\n")
+    repo.commit()
+    repo.branch("feature")
+    repo.git("mv", "Readme.md", "README.md")
+    repo.commit("rename")
+    [change] = LocalGit.open(repo_dir).collect(CompareOptions()).files
+    assert change.change_kind is ChangeKind.RENAME
+    assert (change.old_path, change.path) == ("Readme.md", "README.md")

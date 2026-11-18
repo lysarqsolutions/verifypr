@@ -154,6 +154,22 @@ class LocalGit:
             hint="Pick one with --base <branch>, for example: verifypr --base develop",
         )
 
+    def _remote_copy(self, branch: str, notes: list[str]) -> str:
+        """When you're on the base branch itself, compare with its remote copy so commits
+        that haven't been pushed yet (often an agent working directly on main) are seen."""
+        upstream = self._try(
+            "rev-parse", "--abbrev-ref", "--symbolic-full-name", f"{branch}@{{upstream}}"
+        )
+        for candidate in (upstream, f"origin/{branch}"):
+            if candidate and self.ref_exists(candidate):
+                return candidate
+        notes.append(
+            f"You're on `{branch}` and it has no remote copy to compare with, so only "
+            "unsaved changes and new files were checked. To check commits too, compare with "
+            "an earlier point, e.g. `verifypr --base HEAD~3`."
+        )
+        return branch
+
     # ---- reading ---------------------------------------------------------------
     def _diff(self, *revs: str, cached: bool = False) -> list[ParsedFile]:
         args = [*_DIFF_ARGS, *(("--cached",) if cached else ()), *revs, "--"]
@@ -248,6 +264,8 @@ class LocalGit:
             )
 
         base = self.detect_base(options.base)
+        if options.base is None and branch is not None and base == branch:
+            base = self._remote_copy(branch, notes)
         head = options.head or "HEAD"
         if options.head and not self.ref_exists(options.head):
             raise NoBaseBranchError(
@@ -277,7 +295,7 @@ class LocalGit:
             parts.append("unsaved changes")
         if untracked:
             parts.append(_plural(len(untracked), "new file"))
-        what = " + ".join(parts) if parts else "nothing"
+        what = " + ".join(parts) if parts else "no changes"
         compared = f"{what[0].upper()}{what[1:]}, compared with `{base}`"
         return self._changeset(
             parsed + untracked, base, compared, notes, old_rev=start, new_rev=None

@@ -18,7 +18,9 @@ def _cell(text: str) -> str:
 
 def render_markdown(report: Report) -> str:
     icon = "🔎" if report.file_count == 0 else _ICON[report.verdict]
-    out = [f"## {icon} {report_headline(report)}", "", f"Compared: {report.compared}"]
+    out = [f"## {icon} {report_headline(report)}"]
+    if report.file_count:
+        out += ["", f"Compared: {report.compared}"]
     for note in report.notes:
         out.append(f"> Note: {note}")
     if report.file_count == 0:
