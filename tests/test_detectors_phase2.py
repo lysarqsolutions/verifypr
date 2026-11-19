@@ -223,7 +223,7 @@ def test_u17_moved_button_is_not_removed() -> None:
 def _repo_with_users(*users: str) -> dict[str, str]:
     repo = {"src/shared/CustomerForm.tsx": "export function CustomerForm() {}\n"}
     for user in users:
-        repo[user] = "import { CustomerForm } from '../../shared/CustomerForm';\n"
+        repo[user] = "import { CustomerForm } from '../../src/shared/CustomerForm';\n"
     return repo
 
 

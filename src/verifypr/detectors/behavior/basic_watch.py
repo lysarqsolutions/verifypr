@@ -29,7 +29,11 @@ _ACCESS = re.compile(
     r"permission_required|requires_auth|canactivate|canload|auth_?guard|authori[sz]ation_?polic\w*|"
     r"feature_?flags?|is_?feature_?enabled|feature_?toggles?)\b"
 )
-_ACCESS_KEY = re.compile(r"""["']?\b(?:roles?|permissions?|allowed_?roles)\b["']?\s*[:=]""", re.I)
+# A quoted key such as ``"roles": [...]`` in JSON/YAML-like code (the key is a string, so
+# the word search on string-free text can't see it).
+_QUOTED_ACCESS_KEY = re.compile(
+    r"""(?:^|[{,\s])["'](?:roles?|permissions?|allowed_?roles)["']\s*:""", re.I
+)
 _AUTH_REQUIRED = re.compile(
     r"@login_required|@permission_required|@PreAuthorize|@RolesAllowed|@Secured|\[Authorize\b|"
     r"\brequires_auth\b|\bcanActivate\s*:|@UseGuards|\bIsAuthenticated\b|\bauthenticate\s*\(|"
@@ -51,6 +55,21 @@ UI_GLOBS = (
     "*.ts",
     "*.js",
 )
+# HTML/JSX accessibility attribute (``<div role="button">``), not a permission role.
+_ARIA_ROLE = re.compile(r"""(?<=[\s<])role=(?:"[^"]*"|'[^']*'|\{[^}]*\})""")
+ROUTE_FILE_GLOBS = (
+    "*route*",
+    "*Route*",
+    "*router*",
+    "*Router*",
+    "*routing*",
+    "*Routing*",
+    "**/pages/**",
+    "App.*",
+    "app.routes.*",
+    "urls.py",
+)
+_ROUTE_CONTEXT = re.compile(r"<Route\b|\brouter\.|\bRoutes\b|createBrowserRouter|\bpath\s*\(")
 MENU_GLOBS = ("*menu*", "*nav*", "*sidebar*", "*Menu*", "*Nav*", "*Sidebar*")
 _ROUTE = re.compile(r"""(?:\bpath\s*:\s*|<Route\b[^>]*?\bpath\s*=\s*\{?\s*)['"`]([^'"`]+)['"`]""")
 _MENU_ITEM = re.compile(r"""\b(?:label|title|text|name)\s*:\s*['"`]([^'"`]{2,60})['"`]""")
@@ -75,9 +94,10 @@ def _ui_label(line: str) -> str:
 def _is_access_line(line: str) -> bool:
     """Role/permission words in actual code (keys and values like ``roles: [...]`` count;
     the same words in comments, docstrings or inside other strings don't)."""
+    line = _ARIA_ROLE.sub(" ", line)
     if not looks_like_code(line):
         return False
-    return bool(_ACCESS.search(without_strings(line)) or _ACCESS_KEY.search(line))
+    return bool(_ACCESS.search(without_strings(line)) or _QUOTED_ACCESS_KEY.search(line))
 
 
 def _access_findings(hunks: list[Hunk]) -> list[Finding]:
@@ -136,7 +156,16 @@ def _ui_findings(hunks: list[Hunk]) -> list[Finding]:
     out: list[Finding] = []
     for hunk in ui_hunks:
         gone, _new = changed_lines(hunk)
-        routes = sorted({m.group(1) for g in gone for m in _ROUTE.finditer(g)} - added_routes)
+        in_route_file = any_match(ROUTE_FILE_GLOBS, hunk.file_path)
+        routes = sorted(
+            {
+                m.group(1)
+                for g in gone
+                if in_route_file or _ROUTE_CONTEXT.search(g)
+                for m in _ROUTE.finditer(g)
+            }
+            - added_routes
+        )
         if routes:
             out.append(
                 _ui(

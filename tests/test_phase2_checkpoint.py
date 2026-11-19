@@ -16,7 +16,7 @@ from tests.test_cli import BANNED
 from verifypr.cli import app
 
 runner = CliRunner()
-FORM_IMPORT = "import { CustomerForm } from '../../shared/CustomerForm';\n"
+FORM_IMPORT = "import { CustomerForm } from '../../src/shared/CustomerForm';\n"
 
 
 def _repo(path: Path) -> Repo:

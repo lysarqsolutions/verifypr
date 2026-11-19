@@ -4,7 +4,7 @@ Public interface: ``CompareOptions``, ``LocalGit.open(path)``, ``LocalGit.collec
 
 Every git call goes through ``LocalGit._run``, which uses ``--no-optional-locks`` so even
 ``git status`` never rewrites the index. Only read commands are used (``rev-parse``,
-``diff``, ``ls-files``, ``cat-file``, ``merge-base``, ``rev-list``, ``status``,
+``diff``, ``ls-files``, ``ls-tree``, ``cat-file``, ``merge-base``, ``rev-list``, ``status``,
 ``symbolic-ref``, ``config --get``). No command here may write to the repo or ``.git``.
 """
 
@@ -78,11 +78,16 @@ class LocalGit:
 
     @classmethod
     def _exec(
-        cls, cwd: Path, args: tuple[str, ...] | list[str]
+        cls, cwd: Path, args: tuple[str, ...] | list[str], stdin: bytes | None = None
     ) -> subprocess.CompletedProcess[bytes]:
         try:
             return subprocess.run(
-                [*_GIT_PREFIX, *args], cwd=cwd, env=cls._env(), capture_output=True, check=False
+                [*_GIT_PREFIX, *args],
+                cwd=cwd,
+                env=cls._env(),
+                input=stdin,
+                capture_output=True,
+                check=False,
             )
         except FileNotFoundError as exc:
             raise VerifyPRError(
@@ -179,6 +184,33 @@ class LocalGit:
     def _cat(self, spec: str) -> bytes | None:
         proc = self._exec(self.root, ("cat-file", "blob", spec))
         return proc.stdout if proc.returncode == 0 else None
+
+    def _cat_many(self, specs: dict[str, str]) -> dict[str, bytes | None]:
+        """Read many blobs (``{path: "rev:path"}``) through one ``git cat-file --batch``."""
+        result: dict[str, bytes | None] = {path: None for path in specs}
+        usable = {p: spec for p, spec in specs.items() if "\n" not in spec}
+        if not usable:
+            return result
+        order = list(usable)
+        stdin = "".join(usable[p] + "\n" for p in order).encode("utf-8")
+        proc = self._exec(self.root, ("cat-file", "--batch"), stdin=stdin)
+        if proc.returncode != 0:
+            return {p: self._cat(spec) for p, spec in specs.items()}
+        out = proc.stdout
+        pos = 0
+        for path in order:
+            end = out.find(b"\n", pos)
+            if end == -1:
+                break
+            header = out[pos:end].split()
+            pos = end + 1
+            if len(header) != 3 or not header[2].isdigit():
+                continue  # "<spec> missing" / "ambiguous"
+            size = int(header[2])
+            if header[1] == b"blob":
+                result[path] = out[pos : pos + size]
+            pos += size + 1
+        return result
 
     def _worktree(self, path: str) -> bytes | None:
         full = (self.root / path).resolve()
@@ -361,7 +393,14 @@ class LocalGit:
             read_old=read_old,
             read_new=read_new,
             list_files=lambda: self._list_files(new_rev),
+            read_new_many=lambda paths: self._read_many(paths, new_rev),
         )
+
+    def _read_many(self, paths: list[str], rev: str | None) -> dict[str, bytes | None]:
+        if rev is None:
+            return {p: self._worktree(p) for p in paths}
+        prefix = ":" if rev == ":" else f"{rev}:"
+        return self._cat_many({p: prefix + p for p in paths})
 
     def _list_files(self, rev: str | None) -> list[str]:
         """Every project file after the change (read-only), for 'who uses this file?'."""

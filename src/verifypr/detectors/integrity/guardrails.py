@@ -52,7 +52,6 @@ LINT_CONFIG_GLOBS = (
     ".golangci.yml",
     ".golangci.yaml",
     "checkstyle*.xml",
-    ".editorconfig",
     "biome.json",
     ".stylelintrc*",
     "mypy.ini",
@@ -74,9 +73,61 @@ _CHECK_WORDS = re.compile(
     r"typecheck|type-check|check|audit|scan|coverage|security|codeql|gitleaks|build|verify)\b"
 )
 _STEP_LINE = re.compile(r"^\s*(?:-\s*)?(?:run|script|name|uses|command|cmd)\s*:|^\s*-\s+\S")
-_NEVER_FAIL = re.compile(
-    r"(?i)continue-on-error\s*:\s*true|allow_failure\s*:\s*true|\|\|\s*true\b|"
-    r"\|\|\s*exit\s+0\b|\bset\s+\+e\b|ignore-errors\s*:\s*true|failOnStderr\s*:\s*false"
+# A whole CI step allowed to fail (always worth flagging in CI files).
+_STEP_NEVER_FAIL = re.compile(
+    r"(?i)continue-on-error\s*:\s*true|allow_failure\s*:\s*true|ignore-errors\s*:\s*true|"
+    r"failOnStderr\s*:\s*false"
+)
+# A single command made to "succeed"; only matters when that command is a check.
+_CMD_NEVER_FAIL = re.compile(r"\|\|\s*true\b|\|\|\s*exit\s+0\b|\|\|\s*:\s*$|\bset\s+\+e\b")
+_CHECK_COMMAND = re.compile(
+    r"(?i)\b(?:pytest|jest|vitest|mocha|eslint|ruff|flake8|pylint|mypy|tsc|tox|nox|audit|"
+    r"codeql|gitleaks|coverage|(?:npm|pnpm|yarn)\s+(?:run\s+)?(?:test|lint|check|typecheck)|"
+    r"go\s+(?:test|vet)|cargo\s+(?:test|clippy)|dotnet\s+test|mvn\s+(?:test|verify)|"
+    r"gradlew?\s+(?:test|check)|make\s+(?:test|lint|check))\b"
+)
+# Multi-purpose files: only their lint/type-check sections count as "code-check rules".
+SHARED_CONFIG_FILES = ("pyproject.toml", "setup.cfg", "tox.ini")
+_LINT_SECTION = re.compile(
+    r"(?i)^\[\s*(?:tool\.)?(?:ruff|mypy|pylint|flake8|pycodestyle|pydocstyle|black|isort|"
+    r"pyright|bandit|pylama|pyflakes)\b"
+)
+_SECTION_HEADER = re.compile(r"^\s*\[")
+COVERAGE_CONFIG_GLOBS = (
+    "pyproject.toml",
+    "setup.cfg",
+    "tox.ini",
+    ".coveragerc",
+    "pytest.ini",
+    "jest.config.*",
+    "vitest.config.*",
+    "vite.config.*",
+    "karma.conf.*",
+    "package.json",
+    "codecov.yml",
+    ".codecov.yml",
+    ".nycrc",
+    ".nycrc.*",
+    ".c8rc",
+    ".c8rc.*",
+    "sonar-project.properties",
+)
+STRICT_CONFIG_GLOBS = (
+    "tsconfig*.json",
+    "jsconfig*.json",
+    "mypy.ini",
+    ".mypy.ini",
+    "pyproject.toml",
+    "setup.cfg",
+    "pyrightconfig.json",
+    ".eslintrc",
+    ".eslintrc.*",
+    "eslint.config.*",
+    "phpstan.neon*",
+    "deno.json",
+    "biome.json",
+    "*.csproj",
+    "Directory.Build.props",
 )
 _STRICT_ON = re.compile(
     r"(?i)[\"']?(strict\w*|noImplicit\w+|disallow_\w+|warn_\w+|noUnused\w+|"
@@ -153,7 +204,21 @@ def _suppressions(hunks: list[Hunk]) -> list[Finding]:
     return out
 
 
-def _lint_config(hunks: list[Hunk]) -> list[Finding]:
+def _section_of_lines(ctx: DetectorContext, path: str) -> list[str] | None:
+    """For each line (1-based) of the new file, the ``[section]`` header it sits under."""
+    data = ctx.changes.read_new(path)
+    if data is None:
+        return None
+    sections = [""]
+    current = ""
+    for line in data.decode("utf-8", errors="replace").splitlines():
+        if _SECTION_HEADER.match(line):
+            current = line.strip()
+        sections.append(current)
+    return sections
+
+
+def _lint_config(ctx: DetectorContext, hunks: list[Hunk]) -> list[Finding]:
     out: list[Finding] = []
     for hunk in hunks:
         if not any_match(LINT_CONFIG_GLOBS, hunk.file_path):
@@ -164,6 +229,14 @@ def _lint_config(hunks: list[Hunk]) -> list[Finding]:
             for i, x in enumerate(hunk.added)
             if x.strip() in new and _LINT_OFF.search(x) and not x.strip().startswith(("#", "//"))
         ]
+        if any_match(SHARED_CONFIG_FILES, hunk.file_path):
+            sections = _section_of_lines(ctx, hunk.file_path) or []
+            idx = [
+                i
+                for i in idx
+                if hunk.added_at[i] < len(sections)
+                and _LINT_SECTION.match(sections[hunk.added_at[i]])
+            ]
         if not idx:
             continue
         ev = hunk_evidence(hunk, idx)
@@ -185,6 +258,8 @@ def _lint_config(hunks: list[Hunk]) -> list[Finding]:
 def _coverage(hunks: list[Hunk]) -> list[Finding]:
     out: list[Finding] = []
     for hunk in hunks:
+        if not (any_match(COVERAGE_CONFIG_GLOBS, hunk.file_path) or is_ci_file(hunk.file_path)):
+            continue
         old = {
             m.group(1).lower(): float(m.group(2))
             for x in hunk.removed
@@ -210,6 +285,13 @@ def _coverage(hunks: list[Hunk]) -> list[Finding]:
                 )
             )
     return out
+
+
+def _never_fails(line: str, *, in_ci: bool) -> bool:
+    """A check made to always pass. ``cleanup || true`` is fine; ``pytest || true`` isn't."""
+    if in_ci and _STEP_NEVER_FAIL.search(line):
+        return True
+    return bool(_CMD_NEVER_FAIL.search(line) and _CHECK_COMMAND.search(line))
 
 
 def _ci(ctx: DetectorContext, hunks: list[Hunk]) -> list[Finding]:
@@ -256,9 +338,12 @@ def _ci(ctx: DetectorContext, hunks: list[Hunk]) -> list[Finding]:
                 )
             )
     for hunk in hunks:
-        before = sum(bool(_NEVER_FAIL.search(x)) for x in hunk.removed)
-        idx = [i for i, x in enumerate(hunk.added) if _NEVER_FAIL.search(x)]
-        if len(idx) > before and (is_ci_file(hunk.file_path) or hunk.language == "shell"):
+        in_ci = is_ci_file(hunk.file_path)
+        if not (in_ci or hunk.language == "shell"):
+            continue
+        before = sum(_never_fails(x, in_ci=in_ci) for x in hunk.removed)
+        idx = [i for i, x in enumerate(hunk.added) if _never_fails(x, in_ci=in_ci)]
+        if len(idx) > before:
             ev = hunk_evidence(hunk, idx)
             out.append(
                 _finding(
@@ -270,7 +355,7 @@ def _ci(ctx: DetectorContext, hunks: list[Hunk]) -> list[Finding]:
                     "Settings like `continue-on-error: true` or `|| true` make a failing check "
                     "look like it passed.",
                     f"The check in {hunk.file_path} is allowed to fail on purpose",
-                    critical=True,
+                    critical=in_ci,
                 )
             )
     return out
@@ -316,6 +401,8 @@ def _precommit(ctx: DetectorContext, hunks: list[Hunk]) -> list[Finding]:
 def _strictness(hunks: list[Hunk]) -> list[Finding]:
     out: list[Finding] = []
     for hunk in hunks:
+        if not any_match(STRICT_CONFIG_GLOBS, hunk.file_path):
+            continue
         was_on = {
             m.group(1)
             for x in hunk.removed
@@ -351,7 +438,7 @@ def detect(ctx: DetectorContext) -> list[Finding]:
     hunks = list(ctx.changes.hunks)
     return (
         _suppressions(hunks)
-        + _lint_config(hunks)
+        + _lint_config(ctx, hunks)
         + _coverage(hunks)
         + _ci(ctx, hunks)
         + _precommit(ctx, hunks)

@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed — Phase 2 review
+- No longer blocks merging for ordinary changes: tests skipped only under a condition
+  (e.g. on one OS) are "worth a look", not serious; `cleanup || true` in CI or scripts
+  is fine — only checks made to always pass are flagged (serious only in CI files).
+- Fewer false alarms: packaging settings in `pyproject.toml`/`setup.cfg`/`tox.ini`
+  (only lint sections count), `.editorconfig`, variables named `lines`, `strict` options
+  in app code, HTML/JSX `role="…"` attributes, `path:` options outside route files,
+  same-named files like `utils` in other areas (imports are now resolved to the real
+  file), and expected-value changes when only docs changed.
+- Much faster in `--committed-only`, `--head`, and `--staged` modes on large projects
+  (one git process instead of one per file: 80 s → 4 s on 1,500 files).
+
 ### Added — Phase 2 (tests, safety checks, basic behavior watch)
 - Tests deleted, removed, or weakened: deleted test files, removed test cases (renames
   are reported separately and more gently), fewer checks inside tests, expected values

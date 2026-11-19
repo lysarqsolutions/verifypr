@@ -12,7 +12,7 @@ from collections import defaultdict
 
 from verifypr.analysis.globs import any_match
 from verifypr.detectors.base import DetectorContext, file_evidence, hunk_evidence
-from verifypr.detectors.common import is_test_file, plural, skeleton, without_strings
+from verifypr.detectors.common import is_code_file, is_test_file, plural, skeleton, without_strings
 from verifypr.models import ChangeKind, Evidence, Finding, Hunk, Severity
 
 _TEST_NAME = (
@@ -30,6 +30,9 @@ _SKIP = re.compile(
     r"@pytest\.mark\.(?:skip|skipif|xfail)\b|\bpytest\.(?:skip|xfail)\s*\(|@unittest\.skip|"
     r"\b(?:it|test|describe|context)\.(?:skip|todo)\s*\(|\bx(?:it|describe|test)\s*\(|"
     r"@Ignore\b|@Disabled\b|\[Ignore\b|Skip\s*=\s*\"|\bt\.Skip(?:f|Now)?\s*\(|\bskip\s*\(\s*['\"]"
+)
+_CONDITIONAL_SKIP = re.compile(
+    r"\bskip_?if\b|\bskip_?unless\b|\bimportorskip\b|\.skipIf\s*\(|\.runIf\s*\(", re.I
 )
 _ONLY = re.compile(r"\b(?:it|test|describe|context)\.only\s*\(|\bf(?:it|describe)\s*\(")
 _LOOSE_MOCK = re.compile(
@@ -180,7 +183,8 @@ def _fewer_checks(test_hunks: list[Hunk], already: set[str]) -> list[Finding]:
 
 def _changed_expectations(ctx: DetectorContext, test_hunks: list[Hunk]) -> list[Finding]:
     code_changed = any(
-        not is_test_file(h.file_path) and (h.added or h.removed) for h in ctx.changes.hunks
+        not is_test_file(h.file_path) and is_code_file(h.file_path) and (h.added or h.removed)
+        for h in ctx.changes.hunks
     )
     if not code_changed:
         return []
@@ -215,12 +219,23 @@ def _changed_expectations(ctx: DetectorContext, test_hunks: list[Hunk]) -> list[
     return out
 
 
+def _is_conditional_skip(line: str) -> bool:
+    return bool(_CONDITIONAL_SKIP.search(without_strings(line)))
+
+
+def _is_hard_skip(line: str) -> bool:
+    """Skipped always (critical), as opposed to skipped only under a condition."""
+    return bool(_SKIP.search(without_strings(line))) and not _is_conditional_skip(line)
+
+
 def _markers(test_hunks: list[Hunk]) -> list[Finding]:
     out: list[Finding] = []
     for hunk in test_hunks:
-        before_skip = sum(bool(_SKIP.search(without_strings(x))) for x in hunk.removed)
+        before_skip = sum(_is_hard_skip(x) for x in hunk.removed)
+        before_cond = sum(_is_conditional_skip(x) for x in hunk.removed)
         before_only = sum(bool(_ONLY.search(without_strings(x))) for x in hunk.removed)
-        skip_idx = [i for i, x in enumerate(hunk.added) if _SKIP.search(without_strings(x))]
+        skip_idx = [i for i, x in enumerate(hunk.added) if _is_hard_skip(x)]
+        cond_idx = [i for i, x in enumerate(hunk.added) if _is_conditional_skip(x)]
         only_idx = [i for i, x in enumerate(hunk.added) if _ONLY.search(without_strings(x))]
         if len(skip_idx) > before_skip:
             ev = hunk_evidence(hunk, skip_idx)
@@ -234,6 +249,20 @@ def _markers(test_hunks: list[Hunk]) -> list[Finding]:
                     "Skipped or disabled tests don't run, so they can't catch problems.",
                     f"Skipping the test in {hunk.file_path} is intended and temporary",
                     critical=True,
+                )
+            )
+        if len(cond_idx) > before_cond:
+            ev = hunk_evidence(hunk, cond_idx)
+            out.append(
+                _finding(
+                    f"tests:conditional_skip:{hunk.id}",
+                    Severity.MEDIUM,
+                    70,
+                    (ev,),
+                    f"A test now runs only in some situations ({hunk.file_path}:{ev.start_line})",
+                    "The test is skipped under a condition (for example on one operating system), "
+                    "so it won't catch problems there.",
+                    f"The condition for skipping the test in {hunk.file_path} is right",
                 )
             )
         if len(only_idx) > before_only:
