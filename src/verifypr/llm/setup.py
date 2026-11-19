@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from verifypr.llm.anthropic_client import DEFAULT_ANTHROPIC_MODEL, AnthropicLLM
 from verifypr.llm.base import LLMClient, LLMError, ProviderConfig
-from verifypr.llm.keys import NO_KEY_PROVIDERS, resolve_key
+from verifypr.llm.keys import NO_KEY_PROVIDERS, anthropic_login, resolve_key
 from verifypr.llm.openai_compat import PROVIDER_DEFAULTS, OpenAICompatLLM
 from verifypr.state import read_json, repo_key, write_json
 
@@ -64,7 +64,7 @@ def choose_llm(
     explicit = chosen is not None
     if chosen is None:
         key, _source = resolve_key("anthropic")
-        if not key:
+        if not key and not anthropic_login():
             return LLMChoice(
                 None,
                 False,
@@ -75,7 +75,8 @@ def choose_llm(
     if chosen not in PROVIDERS:
         return LLMChoice(None, explicit, f"Unknown AI provider `{chosen}`.")
     key, _source = resolve_key(chosen)
-    if not key and chosen not in NO_KEY_PROVIDERS:
+    signed_in = chosen == "anthropic" and anthropic_login() is not None
+    if not key and not signed_in and chosen not in NO_KEY_PROVIDERS:
         return LLMChoice(
             None,
             explicit,
@@ -104,12 +105,18 @@ class SendSummary:
     characters: int
     input_tokens: int
     output_tokens: int
+    what: str | None = None
 
     @property
     def cost(self) -> str:
         return estimate_cost(self.model, self.input_tokens, self.output_tokens)
 
     def describe(self) -> str:
+        if self.what:
+            return (
+                f"{self.what} would be sent to {self.provider} ({self.model}). "
+                f"Estimated cost: {self.cost}."
+            )
         size = f"{self.characters / 1000:.0f} KB" if self.characters >= 1000 else "under 1 KB"
         return (
             f"{self.files} changed {'file' if self.files == 1 else 'files'} ({size}, secrets "

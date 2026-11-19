@@ -6,6 +6,7 @@ Public interface: ``AnthropicLLM``, ``DEFAULT_ANTHROPIC_MODEL``.
 - Thinking is left to the model's default (adaptive).
 - Server-side refusal fallbacks are enabled for models that support them.
 - ``stop_reason`` is checked before reading content (refusal / truncated output).
+- The system prompt and the shared task/context prefix are marked for prompt caching.
 """
 
 from __future__ import annotations
@@ -27,6 +28,21 @@ MODELS_WITH_SERVER_FALLBACK = {
 }
 
 
+def _cached_system(system: str) -> Any:
+    """The system prompt never changes between calls, so mark it for prompt caching."""
+    return [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
+
+
+def _user_blocks(prefix: str | None, user: str) -> Any:
+    """Cache the shared task/context prefix; the per-call part (the changes) comes after it."""
+    if not prefix:
+        return user
+    return [
+        {"type": "text", "text": prefix, "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": user},
+    ]
+
+
 class AnthropicLLM:
     provider = "anthropic"
 
@@ -39,7 +55,13 @@ class AnthropicLLM:
         )
 
     def complete_json(
-        self, *, system: str, user: str, schema: dict[str, Any], max_tokens: int
+        self,
+        *,
+        system: str,
+        user: str,
+        schema: dict[str, Any],
+        max_tokens: int,
+        prefix: str | None = None,
     ) -> str:
         use_fallback = self.model in MODELS_WITH_SERVER_FALLBACK
         output_config: Any = {
@@ -50,8 +72,8 @@ class AnthropicLLM:
             response = self._sdk.beta.messages.create(
                 model=self.model,
                 max_tokens=max_tokens,
-                system=system,
-                messages=[{"role": "user", "content": user}],
+                system=_cached_system(system),
+                messages=[{"role": "user", "content": _user_blocks(prefix, user)}],
                 output_config=output_config,
                 betas=[FALLBACK_BETA] if use_fallback else anthropic.omit,
                 fallbacks="default" if use_fallback else anthropic.omit,

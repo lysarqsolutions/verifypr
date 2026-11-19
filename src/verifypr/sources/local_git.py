@@ -411,6 +411,10 @@ class LocalGit:
         prefix = ":" if rev == ":" else f"{rev}:"
         return self._cat_many({p: prefix + p for p in paths})
 
+    def project_files(self) -> list[str]:
+        """Every file in the working folder (tracked + new, not ignored). Needs no base branch."""
+        return self._list_files(None)
+
     def _list_files(self, rev: str | None) -> list[str]:
         """Every project file after the change (read-only), for 'who uses this file?'."""
         if rev is None:

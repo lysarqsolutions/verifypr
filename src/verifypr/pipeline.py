@@ -19,7 +19,7 @@ from verifypr.detectors.registry import run_detectors
 from verifypr.intent.classifier import AIResult, IntentRequest, run_ai_checks
 from verifypr.intent.contract import IntentContract, load_review_contract
 from verifypr.intent.propose import saved_contract
-from verifypr.llm.setup import LLMChoice, LLMSettings, SendSummary, choose_llm
+from verifypr.llm.setup import LLMChoice, LLMSettings, SendSummary, choose_llm, estimate_cost
 from verifypr.models import InputLevel, Report
 from verifypr.sources.local_git import CompareOptions, LocalGit
 from verifypr.verdict import apply_allow_rules, decide
@@ -77,6 +77,7 @@ def run_check(request: CheckRequest) -> tuple[Report, ChangeSet]:
     ai = AIResult()
     model_name: str | None = None
     tokens = 0
+    cost: str | None = None
     if request.use_ai and not changes.is_empty:
         choice = request.choose(config.llm)
         if choice.client is None:
@@ -96,7 +97,9 @@ def run_check(request: CheckRequest) -> tuple[Report, ChangeSet]:
             notes.extend(ai.notes)
             if ai.ai_used:
                 model_name = choice.client.model
-                tokens = choice.client.usage.total
+                usage = choice.client.usage
+                tokens = usage.total
+                cost = estimate_cost(model_name, usage.input_tokens, usage.output_tokens)
 
     kept, allowed = apply_allow_rules(findings + ai.findings, config.allow)
     allowed += len(context.suppressed)
@@ -119,5 +122,6 @@ def run_check(request: CheckRequest) -> tuple[Report, ChangeSet]:
         intent_inferred=level is InputLevel.AUTO and ai.intent is not None,
         ai_model=model_name,
         ai_tokens=tokens,
+        ai_cost=cost,
     )
     return report, changes

@@ -13,6 +13,7 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from verifypr.analysis.redaction import redact
 from verifypr.intent.contract import IntentContract, PathRules
 from verifypr.intent.prompts import load_prompt, render, untrusted
 from verifypr.llm.base import LLMClient, ask_json
@@ -61,7 +62,7 @@ def propose_contract(llm: LLMClient, description: str, files: list[str]) -> Inte
     folders = _top_folders(files)
     user = render(
         "propose_contract",
-        task=untrusted("description", description),
+        task=untrusted("description", redact(description)),
         folders=untrusted("context", "\n".join(f"- {f}" for f in folders) or "(none)"),
     )
     proposal = ask_json(
@@ -70,7 +71,6 @@ def propose_contract(llm: LLMClient, description: str, files: list[str]) -> Inte
         user=user,
         schema=CONTRACT_SCHEMA,
         model=_Proposal,
-        max_tokens=2000,
     )
     return IntentContract(
         goal=proposal.goal.strip()[:300] or description,

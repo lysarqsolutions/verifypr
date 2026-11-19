@@ -180,6 +180,7 @@ class Report(_Model):
     intent_inferred: bool = False
     ai_model: str | None = None
     ai_tokens: int = Field(default=0, ge=0)
+    ai_cost: str | None = Field(default=None, description="Estimated cost of the AI calls.")
     attention_count: int = Field(
         default=0, ge=0, description="Findings that made the verdict WARN or FAIL."
     )

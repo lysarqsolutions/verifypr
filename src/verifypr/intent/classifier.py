@@ -26,6 +26,7 @@ from verifypr.analysis.changes import ChangeSet
 from verifypr.analysis.chunker import Chunk, chunk_hunks, estimate_tokens, split_for_analysis
 from verifypr.analysis.redaction import redact
 from verifypr.detectors.base import hunk_evidence
+from verifypr.detectors.hygiene.formatting import HunkKind, classify_hunk
 from verifypr.intent.contract import IntentContract
 from verifypr.intent.prompts import load_prompt, render, untrusted
 from verifypr.llm.base import LLMClient, LLMError, ask_json
@@ -40,6 +41,7 @@ from verifypr.models import (
 )
 
 ConsentFn = Callable[[SendSummary], bool]
+_SPLIT = "\x00-- changes --\x00"
 MIN_INTENDED_CONFIDENCE = 50
 OUTPUT_TOKENS_PER_CHANGE = 80
 
@@ -146,9 +148,10 @@ def _render_change(short_id: str, hunk: Hunk) -> str:
 def _context_block(changes: ChangeSet) -> str:
     parts: list[str] = []
     if changes.branch:
-        parts.append(f"Branch name: {changes.branch}")
+        parts.append(f"Branch name: {redact(changes.branch)}")
     if changes.commit_messages:
-        parts.append("Commit messages:\n" + "\n".join(f"- {m}" for m in changes.commit_messages))
+        lines = "\n".join(f"- {redact(m)}" for m in changes.commit_messages)
+        parts.append("Commit messages:\n" + lines)
     if not parts:
         return "There is no branch name or commit message to go on."
     return untrusted("context", "\n".join(parts))
@@ -173,7 +176,7 @@ def _task_block(request: IntentRequest, goal: str | None, themes: list[str]) -> 
             "themselves; changes that don't serve that main purpose are `unintended`."
         )
     contract = request.contract
-    lines = ["What this change should do:", untrusted("description", goal or "")]
+    lines = ["What this change should do:", untrusted("description", redact(goal or ""))]
     if contract is not None:
         for label, items in (
             ("It may change", contract.allowed.behaviors),
@@ -182,9 +185,9 @@ def _task_block(request: IntentRequest, goal: str | None, themes: list[str]) -> 
             ("Folders it must not touch", contract.forbidden.paths),
         ):
             if items:
-                lines.append(f"{label}: " + "; ".join(items))
+                lines.append(f"{label}: " + "; ".join(redact(i) for i in items))
         if contract.assumptions:
-            lines.append("Assumptions: " + "; ".join(contract.assumptions))
+            lines.append("Assumptions: " + "; ".join(redact(a) for a in contract.assumptions))
     return "\n".join(lines)
 
 
@@ -250,7 +253,15 @@ def run_ai_checks(
     already_flagged: set[str],
 ) -> AIResult:
     result = AIResult()
-    candidates = [h for h in changes.hunks if h.added or h.removed]
+    with_lines = [h for h in changes.hunks if h.added or h.removed]
+    # Formatting-only changes are already reported by the tidy-up check: don't pay to send them.
+    candidates = [h for h in with_lines if classify_hunk(h) is HunkKind.REAL]
+    tidy = len(with_lines) - len(candidates)
+    if tidy:
+        result.skipped.append(
+            f"{tidy} formatting-only {'change was' if tidy == 1 else 'changes were'} not sent "
+            "to the AI (already covered by the tidy-up check)"
+        )
     kept, ignored = split_for_analysis(candidates, ignore_globs)
     if ignored:
         n = len(ignored)
@@ -293,9 +304,7 @@ def run_ai_checks(
         result.inferred = True
         user = render("infer_intent", context=_context_block(changes), files=_file_summary(changes))
         try:
-            intent = ask_json(
-                llm, system=system, user=user, schema=INTENT_SCHEMA, model=_Intent, max_tokens=1000
-            )
+            intent = ask_json(llm, system=system, user=user, schema=INTENT_SCHEMA, model=_Intent)
             goal, themes = redact(intent.goal.strip())[:300] or None, intent.themes[:5]
             result.ai_used = True
         except LLMError as err:
@@ -306,6 +315,7 @@ def run_ai_checks(
 
     failed = 0
     stop: str | None = None
+    task, context = _task_block(request, goal, themes), _context_block(changes)
     for chunk in planned:
         if stop:
             reason = "Not checked by AI."
@@ -314,12 +324,12 @@ def run_ai_checks(
             ]
             continue
         ids = {f"C{i + 1}": h for i, h in enumerate(chunk.hunks)}
-        user = render(
+        prefix, user = render(
             "classify",
-            task=_task_block(request, goal, themes),
-            context=_context_block(changes),
-            changes="\n\n".join(_render_change(sid, h) for sid, h in ids.items()),
-        )
+            task=task,
+            context=context,
+            changes=_SPLIT + "\n\n".join(_render_change(sid, h) for sid, h in ids.items()),
+        ).split(_SPLIT)
         try:
             verdicts = ask_json(
                 llm,
@@ -327,7 +337,7 @@ def run_ai_checks(
                 user=user,
                 schema=CLASSIFY_SCHEMA,
                 model=_Verdicts,
-                max_tokens=OUTPUT_TOKENS_PER_CHANGE * len(ids) + 2000,
+                prefix=prefix,
             )
         except LLMError as err:
             failed += 1

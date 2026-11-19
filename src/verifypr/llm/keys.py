@@ -11,6 +11,7 @@ command-line arguments.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Literal
 
 SERVICE = "verifypr"
@@ -58,6 +59,21 @@ def resolve_key(provider: str) -> tuple[str | None, KeySource]:
     if provider in _session:
         return _session[provider], "session"
     return None, "none"
+
+
+def anthropic_login() -> str | None:
+    """Anthropic credentials the official SDK finds by itself (no key needed here):
+    an ``ANTHROPIC_AUTH_TOKEN``, an ``ANTHROPIC_PROFILE``, or a profile saved by
+    ``ant auth login``. Returns a plain description, or None."""
+    if os.environ.get("ANTHROPIC_AUTH_TOKEN"):
+        return "the ANTHROPIC_AUTH_TOKEN environment variable"
+    if os.environ.get("ANTHROPIC_PROFILE"):
+        return "the ANTHROPIC_PROFILE sign-in profile"
+    config_home = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    folder = Path(config_home) / "anthropic"
+    if folder.is_dir() and any(folder.iterdir()):
+        return "your `ant auth login` sign-in"
+    return None
 
 
 def save_key(provider: str, key: str) -> None:

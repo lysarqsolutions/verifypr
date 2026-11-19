@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed — Phase 3 review
+- Secrets in commit messages, branch names, `--describe` text and saved scopes are now
+  removed before anything is sent to the AI (only changed code lines were before).
+- AI calls allow 16,000 output tokens (the default model always thinks, and thinking
+  counts toward the limit) and wait up to 5 minutes, so answers aren't cut off.
+- OpenAI and Azure get `max_completion_tokens`; other compatible servers keep `max_tokens`.
+- `intent init` says what it actually sends (your description and folder names, no
+  code) and no longer needs a base branch.
+- Anthropic sign-ins without an API key (`ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_PROFILE`,
+  `ant auth login`) are recognised.
+- Lower cost: the system prompt and the shared task/context are marked for prompt
+  caching, and formatting-only changes are no longer sent to the AI.
+- Reports show AI tokens used and the estimated cost.
+
 ### Added — Phase 3 (AI intent checks)
 - Optional AI checks that say, for every change, whether it was **asked for**, **needed
   for the change**, **not asked for**, or **not sure** — with a plain reason. Three ways

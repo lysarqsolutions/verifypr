@@ -60,7 +60,11 @@ def numbers(report: Report) -> str | None:
 
 def depth_line(report: Report) -> str:
     if report.ai_used:
-        return f"Checked with AI ({report.ai_model}) plus rule-based checks."
+        cost = f" · {report.ai_cost}" if report.ai_cost else ""
+        return (
+            f"Checked with AI ({report.ai_model} · {report.ai_tokens:,} tokens{cost}) "
+            "plus rule-based checks."
+        )
     return "Only basic rule-based checks ran."
 
 

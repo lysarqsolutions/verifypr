@@ -25,12 +25,21 @@ class FakeLLM:
         self.usage = Usage()
         self.replies: list[Reply] = list(replies or [])
         self.prompts: list[tuple[str, str]] = []
+        self.max_tokens: list[int] = []
         self.default: Reply | None = None
 
     def complete_json(
-        self, *, system: str, user: str, schema: dict[str, Any], max_tokens: int
+        self,
+        *,
+        system: str,
+        user: str,
+        schema: dict[str, Any],
+        max_tokens: int,
+        prefix: str | None = None,
     ) -> str:
+        user = (prefix or "") + user
         self.prompts.append((system, user))
+        self.max_tokens.append(max_tokens)
         reply = self.replies.pop(0) if self.replies else self.default
         if reply is None:
             raise LLMError("other", "FakeLLM has no reply scripted.")

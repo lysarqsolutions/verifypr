@@ -50,10 +50,12 @@ def isolated_git_config(tmp_path_factory: pytest.TempPathFactory) -> Iterator[No
         "VERIFYPR_LLM_API_KEY",
         "VERIFYPR_LLM_PROVIDER",
         "VERIFYPR_LLM_MODEL",
+        "ANTHROPIC_PROFILE",
         "VERIFYPR_LLM_BASE_URL",
     ):
         os.environ.pop(var, None)
     os.environ["VERIFYPR_STATE_DIR"] = str(home / "state")
+    os.environ["XDG_CONFIG_HOME"] = str(home / "config")  # no real `ant auth login` profile
     import keyring
 
     from tests.memory_keyring import MemoryKeyring

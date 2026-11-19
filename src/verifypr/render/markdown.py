@@ -77,7 +77,8 @@ def render_markdown(report: Report) -> str:
         ]
 
     depth = (
-        f"model: {report.ai_model} · tokens: {report.ai_tokens}"
+        f"model: {report.ai_model} · tokens: {report.ai_tokens:,}"
+        + (f" · cost: {report.ai_cost}" if report.ai_cost else "")
         if report.ai_used
         else "basic checks only"
     )

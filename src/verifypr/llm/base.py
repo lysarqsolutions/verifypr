@@ -48,7 +48,7 @@ class ProviderConfig:
     api_key: str | None = field(default=None, repr=False)
     base_url: str | None = None
     effort: str = "medium"
-    timeout_s: float = 120.0
+    timeout_s: float = 300.0
 
 
 class LLMClient(Protocol):
@@ -57,11 +57,23 @@ class LLMClient(Protocol):
     usage: Usage
 
     def complete_json(
-        self, *, system: str, user: str, schema: dict[str, Any], max_tokens: int
+        self,
+        *,
+        system: str,
+        user: str,
+        schema: dict[str, Any],
+        max_tokens: int,
+        prefix: str | None = None,
     ) -> str:
-        """Return the model's raw JSON text for ``schema``. Raise ``LLMError`` on failure."""
+        """Return the model's raw JSON text for ``schema``. Raise ``LLMError`` on failure.
+
+        ``prefix`` is the part of the user message that repeats across calls (task and
+        context); providers that support it cache it to cut cost."""
         ...
 
+
+# Thinking models count their reasoning against this limit, so keep it generous.
+MAX_OUTPUT_TOKENS = 16_000
 
 _RETRY_NOTE = (
     "\n\nYour previous answer was not valid JSON for the required schema. "
@@ -76,13 +88,14 @@ def ask_json(
     user: str,
     schema: dict[str, Any],
     model: type[T],
-    max_tokens: int = 8000,
+    max_tokens: int = MAX_OUTPUT_TOKENS,
+    prefix: str | None = None,
 ) -> T:
     """Ask for JSON and validate it; one retry on invalid output, then ``LLMError``."""
     prompt = user
     for attempt in range(2):
         text = client.complete_json(
-            system=system, user=prompt, schema=schema, max_tokens=max_tokens
+            system=system, user=prompt, schema=schema, max_tokens=max_tokens, prefix=prefix
         )
         try:
             return model.model_validate(json.loads(text))

@@ -73,7 +73,8 @@ def test_checkpoint_a_zero_input(repo_dir: Path, monkeypatch: pytest.MonkeyPatch
     assert result.exit_code == 1, out
     assert "Checked against (my best guess): Add segment filtering" in out
     assert "Looks unrelated to the main change: src/billing/invoice.py (billing rename)" in out
-    assert "Checked with AI (claude-opus-5-5) plus rule-based checks." in out
+    assert "Checked with AI (claude-opus-5-5 · " in out
+    assert "tokens · under $0.01) plus rule-based checks." in out
     assert "would be sent to anthropic (claude-opus-5-5)" in out  # CI-style consent line
     assert not BANNED.search(out.split("Note: ")[0]), BANNED.search(out)
 

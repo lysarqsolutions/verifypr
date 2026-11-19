@@ -281,7 +281,7 @@ def key_set(provider: str = ProviderArg) -> None:
 @key_app.command("status")
 def key_status() -> None:
     """Show which providers have a key and where it comes from (last 4 characters only)."""
-    from verifypr.llm.keys import ENV_VARS, masked, resolve_key
+    from verifypr.llm.keys import ENV_VARS, anthropic_login, masked, resolve_key
 
     for provider in ENV_VARS:
         secret, source = resolve_key(provider)
@@ -290,6 +290,8 @@ def key_status() -> None:
                 f"environment variable {ENV_VARS[provider]}" if source == "environment" else source
             )
             typer.echo(f"{provider}: {masked(secret)} (from {where})")
+        elif provider == "anthropic" and anthropic_login():
+            typer.echo(f"anthropic: signed in through {anthropic_login()}")
         else:
             typer.echo(f"{provider}: no key")
 
@@ -328,7 +330,7 @@ def key_test(
             system="Reply with JSON only.",
             user='Reply with {"ok": true}.',
             schema=schema,
-            max_tokens=200,
+            max_tokens=4000,
         )
     except LLMError as err:
         _fail(VerifyPRError(err.message))
@@ -355,7 +357,7 @@ def intent_init(
     try:
         git = LocalGit.open(repo)
         config = load_config(git.root)
-        changes = git.collect(CompareOptions())
+        files = git.project_files()
     except VerifyPRError as err:
         _fail(err)
         return
@@ -364,12 +366,18 @@ def intent_init(
         _fail(VerifyPRError(choice.reason or "No AI provider is set up."))
         return
     summary = SendSummary(
-        choice.client.provider, choice.client.model, 0, len(description), 800, 400
+        choice.client.provider,
+        choice.client.model,
+        0,
+        len(description),
+        800,
+        400,
+        what="Your description and the names of your project's top folders (no code)",
     )
     if not ask_consent(git.root, summary, choice.explicit):
         _fail(VerifyPRError("Not sent: you chose not to send this to the AI."))
     try:
-        contract = propose_contract(choice.client, description, changes.list_files())
+        contract = propose_contract(choice.client, description, files)
     except LLMError as err:
         _fail(VerifyPRError(err.message))
         return

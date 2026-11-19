@@ -42,16 +42,26 @@ class OpenAICompatLLM:
                 headers["Authorization"] = f"Bearer {config.api_key}"
         self._http = http or httpx.Client(timeout=config.timeout_s)
         self._headers = headers
+        # OpenAI's own API (and Azure) want max_completion_tokens; most others max_tokens.
+        self._token_param = (
+            "max_completion_tokens" if config.provider in ("openai", "azure") else "max_tokens"
+        )
 
     def complete_json(
-        self, *, system: str, user: str, schema: dict[str, Any], max_tokens: int
+        self,
+        *,
+        system: str,
+        user: str,
+        schema: dict[str, Any],
+        max_tokens: int,
+        prefix: str | None = None,
     ) -> str:
-        body = {
+        body: dict[str, Any] = {
             "model": self.model,
-            "max_tokens": max_tokens,
+            self._token_param: max_tokens,
             "messages": [
                 {"role": "system", "content": system},
-                {"role": "user", "content": user},
+                {"role": "user", "content": (prefix or "") + user},
             ],
             "response_format": {
                 "type": "json_schema",
