@@ -1,6 +1,6 @@
 # VerifyPR
 
-> **Status: pre-alpha (Phase 1 — rule-based checks).** Usable for early testing; expect changes.
+> **Status: pre-alpha (Phase 2 — rule-based checks).** Usable for early testing; expect changes.
 
 ## Try it
 

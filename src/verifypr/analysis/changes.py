@@ -2,7 +2,7 @@
 
 Public interface: ``ChangeSet``. Detectors receive one of these. ``read_old``/``read_new``
 return file bytes before/after the change (``None`` if the file doesn't exist there);
-both are read-only.
+``list_files`` returns every file path in the project after the change. All read-only.
 """
 
 from __future__ import annotations
@@ -13,10 +13,15 @@ from dataclasses import dataclass, field
 from verifypr.models import FileChange, Hunk
 
 Reader = Callable[[str], "bytes | None"]
+Lister = Callable[[], "list[str]"]
 
 
 def _no_reader(_path: str) -> bytes | None:
     return None
+
+
+def _no_files() -> list[str]:
+    return []
 
 
 @dataclass(frozen=True)
@@ -28,6 +33,7 @@ class ChangeSet:
     notes: tuple[str, ...] = ()
     read_old: Reader = field(default=_no_reader, repr=False)
     read_new: Reader = field(default=_no_reader, repr=False)
+    list_files: Lister = field(default=_no_files, repr=False)
 
     def hunks_for(self, path: str) -> list[Hunk]:
         return [h for h in self.hunks if h.file_path == path]

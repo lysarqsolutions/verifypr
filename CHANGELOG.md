@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added — Phase 2 (tests, safety checks, basic behavior watch)
+- Tests deleted, removed, or weakened: deleted test files, removed test cases (renames
+  are reported separately and more gently), fewer checks inside tests, expected values
+  changed in the same change as the code they test, new skip/only/disabled markers,
+  bulk snapshot updates, "accept any value" mocks, and raised time limits.
+- Safety checks switched off: new `@ts-ignore` / `eslint-disable` / `# type: ignore` /
+  `noqa` / `@SuppressWarnings` and similar, relaxed lint configs, lowered coverage
+  limits, CI steps removed or commented out, CI files deleted, steps set to never fail
+  (`continue-on-error`, `|| true`), pre-commit checks removed, strict settings off.
+- Basic behavior watch (labeled "Basic check", replaced by full detectors in v0.2):
+  changed role/permission/feature-flag lines, removed login/permission requirements,
+  removed routes, menu items, buttons and links, buttons that became conditional, and
+  changed files imported by several other areas ("used in 3 other areas").
+- Deleted tests, skipped tests, removed CI checks, and removed login requirements are
+  treated as serious ("Don't merge yet").
+- Patterns inside strings, comments, and docstrings are ignored (found by running
+  VerifyPR on its own code).
+
 ### Added — Phase 1 (rule-based checks)
 - `verifypr` (no arguments) checks your work: everything on your branch since it split
   from the base branch, plus unsaved changes, plus new files git doesn't track yet.

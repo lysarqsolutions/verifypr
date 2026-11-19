@@ -49,6 +49,7 @@ def changeset(
         compared="Your branch (1 commit), compared with `main`",
         read_old=lambda p: old[p].encode() if p in old else None,
         read_new=lambda p: new[p].encode() if p in new else None,
+        list_files=lambda: sorted(new),
     )
 
 

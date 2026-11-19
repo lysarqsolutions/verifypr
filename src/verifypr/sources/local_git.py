@@ -360,4 +360,15 @@ class LocalGit:
             notes=tuple(notes),
             read_old=read_old,
             read_new=read_new,
+            list_files=lambda: self._list_files(new_rev),
         )
+
+    def _list_files(self, rev: str | None) -> list[str]:
+        """Every project file after the change (read-only), for 'who uses this file?'."""
+        if rev is None:
+            raw = self._run("ls-files", "-z", "--cached", "--others", "--exclude-standard")
+        elif rev == ":":
+            raw = self._run("ls-files", "-z", "--cached")
+        else:
+            raw = self._run("ls-tree", "-r", "-z", "--name-only", rev)
+        return sorted({p for p in raw.decode("utf-8", errors="replace").split("\0") if p})
