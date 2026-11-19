@@ -32,7 +32,10 @@ _ACCESS = re.compile(
 # A quoted key such as ``"roles": [...]`` in JSON/YAML-like code (the key is a string, so
 # the word search on string-free text can't see it).
 _QUOTED_ACCESS_KEY = re.compile(
-    r"""(?:^|[{,\s])["'](?:roles?|permissions?|allowed_?roles)["']\s*:""", re.I
+    r"""(?:^|[{,\s])["'](?:roles?|permissions?|allowed_?roles)["']\s*:"""
+    # ...but not chat-message roles such as {"role": "user"} in AI/LLM code.
+    r"""(?!\s*["'](?:user|assistant|system|tool|developer|function|model)["'])""",
+    re.I,
 )
 _AUTH_REQUIRED = re.compile(
     r"@login_required|@permission_required|@PreAuthorize|@RolesAllowed|@Secured|\[Authorize\b|"

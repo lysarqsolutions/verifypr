@@ -79,7 +79,9 @@ def test_top_issues_ranks_by_severity_times_confidence() -> None:
         compared="Your branch compared with main",
         findings=(unsure_high, minor, sure_medium, sure_high),
     )
-    assert [f.id for f in report.top_issues()] == ["c", "a", "b"]
+    # "b" is Important but only 42% sure: shown under "Worth a look", not hidden.
+    assert [f.id for f in report.top_issues()] == ["c", "a", "d"]
+    assert [f.id for f in report.worth_a_look()] == ["b"]
 
 
 def test_report_json_has_schema_version() -> None:

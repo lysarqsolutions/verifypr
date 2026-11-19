@@ -40,9 +40,30 @@ def isolated_git_config(tmp_path_factory: pytest.TempPathFactory) -> Iterator[No
     )
     for var in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
         os.environ.pop(var, None)
+    # Never use the developer's real AI keys, keychain, or VerifyPR state in tests.
+    for var in (
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "OPENAI_API_KEY",
+        "AZURE_OPENAI_API_KEY",
+        "OPENROUTER_API_KEY",
+        "VERIFYPR_LLM_API_KEY",
+        "VERIFYPR_LLM_PROVIDER",
+        "VERIFYPR_LLM_MODEL",
+        "VERIFYPR_LLM_BASE_URL",
+    ):
+        os.environ.pop(var, None)
+    os.environ["VERIFYPR_STATE_DIR"] = str(home / "state")
+    import keyring
+
+    from tests.memory_keyring import MemoryKeyring
+
+    previous_keyring = keyring.get_keyring()
+    keyring.set_keyring(MemoryKeyring())
     try:
         yield
     finally:
+        keyring.set_keyring(previous_keyring)
         os.environ.clear()
         os.environ.update(saved)
 

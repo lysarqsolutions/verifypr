@@ -37,6 +37,8 @@ class ChangeSet:
     read_new: Reader = field(default=_no_reader, repr=False)
     list_files: Lister = field(default=_no_files, repr=False)
     read_new_many: ManyReader | None = field(default=None, repr=False)
+    branch: str | None = None
+    commit_messages: tuple[str, ...] = ()
 
     def read_many(self, paths: list[str]) -> dict[str, bytes | None]:
         """Read many files after the change at once (one git process when git is involved)."""

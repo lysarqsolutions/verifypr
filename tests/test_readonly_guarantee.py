@@ -26,6 +26,11 @@ DEFAULT_COMMANDS: list[list[str]] = [
     ["check", "--head", "feature"],
     ["diff"],
     ["diff", "--json"],
+    ["explain"],
+    ["check", "--no-llm"],
+    ["check", "--describe", "Add averages"],
+    ["intent", "show"],
+    ["key", "status"],
 ]
 
 

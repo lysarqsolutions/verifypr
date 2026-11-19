@@ -11,6 +11,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from verifypr.intent.contract import Tolerances, _friendly_validation, read_yaml_mapping
+from verifypr.llm.setup import LLMSettings
 
 CONFIG_FILENAME = ".verifypr.yml"
 
@@ -52,6 +53,7 @@ class Config(_M):
     allow: tuple[AllowRule, ...] = ()
     disabled_detectors: tuple[str, ...] = ()
     tolerances: Tolerances = Tolerances()
+    llm: LLMSettings = LLMSettings()
 
 
 def load_config(repo_root: Path) -> Config:

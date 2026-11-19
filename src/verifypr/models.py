@@ -144,6 +144,25 @@ class Finding(_Model):
         return self.severity.weight * self.confidence
 
 
+def _worth_a_look(finding: Finding) -> bool:
+    return finding.severity is Severity.HIGH and finding.confidence < 50
+
+
+class ClassifiedChange(_Model):
+    """How one change relates to what was asked (internal names; see render.labels)."""
+
+    hunk_id: str = Field(min_length=1)
+    file_path: str = Field(min_length=1)
+    start_line: int = Field(ge=1)
+    end_line: int = Field(ge=1)
+    classification: Classification
+    reason: str
+    theme: str | None = None
+    supports: str | None = Field(default=None, description="Hunk id this change supports.")
+    confidence: int = Field(ge=0, le=100)
+    ai: bool = Field(default=True, description="False when the AI couldn't check this part.")
+
+
 class Report(_Model):
     schema_version: str = SCHEMA_VERSION
     verdict: Verdict
@@ -156,6 +175,11 @@ class Report(_Model):
     ai_used: bool = False
     file_count: int = Field(default=0, ge=0)
     allowed_count: int = Field(default=0, ge=0, description="Findings suppressed by allow rules.")
+    changes: tuple[ClassifiedChange, ...] = ()
+    intent: str | None = Field(default=None, description="What the change was checked against.")
+    intent_inferred: bool = False
+    ai_model: str | None = None
+    ai_tokens: int = Field(default=0, ge=0)
     attention_count: int = Field(
         default=0, ge=0, description="Findings that made the verdict WARN or FAIL."
     )
@@ -165,8 +189,15 @@ class Report(_Model):
         return sorted(self.findings, key=lambda f: f.priority, reverse=True)
 
     def top_issues(self, limit: int = 3) -> list[Finding]:
-        """Highest-priority findings first; ties keep their original order."""
-        return self.ranked()[:limit]
+        """Highest-priority findings first, leaving out the 'worth a look' ones."""
+        return [f for f in self.ranked() if not _worth_a_look(f)][:limit]
+
+    def worth_a_look(self) -> list[Finding]:
+        """Possibly important but not sure (High and < 50% sure): shown apart, not hidden."""
+        return [f for f in self.ranked() if _worth_a_look(f)]
+
+    def count(self, classification: Classification) -> int:
+        return sum(1 for c in self.changes if c.classification is classification)
 
     def check_items(self, limit: int = 10) -> list[str]:
         """Deduplicated 'Please check before approving' items, most important first."""

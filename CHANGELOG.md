@@ -6,6 +6,30 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added — Phase 3 (AI intent checks)
+- Optional AI checks that say, for every change, whether it was **asked for**, **needed
+  for the change**, **not asked for**, or **not sure** — with a plain reason. Three ways
+  in: no input (VerifyPR makes a labelled best guess from the branch, commits and files),
+  `--describe "…"`, or a saved scope from `verifypr intent init "…"`.
+- Providers: Anthropic via the official SDK (default model `claude-opus-5-5`, server-side
+  refusal fallback enabled), and any OpenAI-compatible endpoint (OpenAI, Azure OpenAI,
+  OpenRouter, Ollama, vLLM). A scripted fake is used for all tests.
+- `verifypr key set|status|remove|test`: keys come from environment variables or the OS
+  keychain; never files, arguments, logs or reports.
+- Consent before the first send (what, how much, to whom, estimated cost); CI sends only
+  with an explicitly configured provider.
+- Never crashes mid-review: a failed or too-large part becomes "Not sure — AI check failed
+  for this part"; invalid answers get one retry; invented ids are ignored; unsure "asked
+  for" answers are downgraded to "not sure". Secrets are removed before sending.
+- Prompt-injection hardening: repository text sits in `<untrusted_*>` blocks that it
+  can't close; AI findings can only add warnings.
+- `verifypr explain` (full Markdown report incl. "Changes not asked for"), "Worth a look"
+  for important-but-unsure findings, and "Checked against …" in every report.
+
+### Fixed
+- `"role": "user"` in chat-message code is no longer an "access rule" (found by running
+  VerifyPR on its own Phase 3 changes).
+
 ### Fixed — Phase 2 review
 - No longer blocks merging for ordinary changes: tests skipped only under a condition
   (e.g. on one OS) are "worth a look", not serious; `cleanup || true` in CI or scripts

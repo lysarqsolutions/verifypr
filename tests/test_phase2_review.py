@@ -238,3 +238,14 @@ def test_unknown_files_in_batch_are_none(repo_dir: Path) -> None:
 
 def test_new_file_diff_helper_still_works() -> None:
     assert changeset(new_file_diff("x.py", "a\n")).files[0].path == "x.py"
+
+
+def test_chat_message_roles_are_not_access_rules() -> None:
+    diff = modify_diff(
+        "src/llm/client.py",
+        '    messages=[{"role": "user", "content": q}],\n',
+        '    messages=[{"role": "system", "content": s}, {"role": "user", "content": q}],\n',
+    )
+    assert basic_watch.detect(ctx(changeset(diff))) == []
+    real = modify_diff("src/users.ts", '  { "role": "admin" },\n', '  { "role": "viewer" },\n')
+    assert [f.problem_id for f in basic_watch.detect(ctx(changeset(real)))] == ["U18"]

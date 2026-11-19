@@ -6,8 +6,8 @@ Same headline and wording as the terminal: answer first, details in a collapsed 
 from __future__ import annotations
 
 from verifypr import __version__
-from verifypr.models import Report, Verdict
-from verifypr.render.text import importance, report_headline, where
+from verifypr.models import Classification, Report, Verdict
+from verifypr.render.text import checked_against, importance, numbers, report_headline, where
 
 _ICON = {Verdict.PASS: "✅", Verdict.WARN: "⚠️", Verdict.FAIL: "⛔"}
 
@@ -21,6 +21,8 @@ def render_markdown(report: Report) -> str:
     out = [f"## {icon} {report_headline(report)}"]
     if report.file_count:
         out += ["", f"Compared: {report.compared}"]
+    if report.file_count and report.intent:
+        out += ["", checked_against(report)]
     for note in report.notes:
         out.append(f"> Note: {note}")
     if report.file_count == 0:
@@ -52,15 +54,33 @@ def render_markdown(report: Report) -> str:
                 f"| {_cell(finding.title)} | {_cell(where(finding, limit=5))} | "
                 f"{importance(finding)} |"
             )
+        not_asked = [c for c in report.changes if c.classification is Classification.UNINTENDED]
+        if not_asked:
+            out += [
+                "",
+                "### Changes not asked for",
+                "| File | Lines | Why it was flagged |",
+                "|------|-------|--------------------|",
+            ]
+            out += [
+                f"| {_cell(c.file_path)} | {c.start_line}-{c.end_line} | {_cell(c.reason)} |"
+                for c in not_asked
+            ]
         out += [
             "",
             "### Numbers",
             f"{report.file_count} files changed · "
-            f"{len(ranked)} findings · {report.allowed_count} allowed by your rules",
+            f"{len(ranked)} findings · {report.allowed_count} allowed by your rules"
+            + (f"  \n{numbers(report)}" if numbers(report) else ""),
             "",
             "</details>",
         ]
 
-    depth = "AI-assisted checks" if report.ai_used else "basic checks only"
-    out += ["", f"<sub>VerifyPR {__version__} · {depth}</sub>"]
+    depth = (
+        f"model: {report.ai_model} · tokens: {report.ai_tokens}"
+        if report.ai_used
+        else "basic checks only"
+    )
+    level = f" · input: {report.input_level.value}"
+    out += ["", f"<sub>VerifyPR {__version__} · {depth}{level}</sub>"]
     return "\n".join(out) + "\n"

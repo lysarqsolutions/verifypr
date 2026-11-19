@@ -5,7 +5,7 @@ Public interface: ``CompareOptions``, ``LocalGit.open(path)``, ``LocalGit.collec
 Every git call goes through ``LocalGit._run``, which uses ``--no-optional-locks`` so even
 ``git status`` never rewrites the index. Only read commands are used (``rev-parse``,
 ``diff``, ``ls-files``, ``ls-tree``, ``cat-file``, ``merge-base``, ``rev-list``, ``status``,
-``symbolic-ref``, ``config --get``). No command here may write to the repo or ``.git``.
+``symbolic-ref``, ``config --get``, ``log``). No command here may write to the repo or ``.git``.
 """
 
 from __future__ import annotations
@@ -394,7 +394,16 @@ class LocalGit:
             read_new=read_new,
             list_files=lambda: self._list_files(new_rev),
             read_new_many=lambda paths: self._read_many(paths, new_rev),
+            branch=self.current_branch() if self.has_commits() else None,
+            commit_messages=self._commit_messages(old_rev, new_rev),
         )
+
+    def _commit_messages(self, start: str | None, end: str | None) -> tuple[str, ...]:
+        """Subjects of the commits being checked (context for inferring intent)."""
+        if not start or end == ":" or not self.has_commits():
+            return ()
+        out = self._try("log", "--format=%s", "-n", "30", f"{start}..{end or 'HEAD'}")
+        return tuple(line for line in (out or "").splitlines() if line.strip())
 
     def _read_many(self, paths: list[str], rev: str | None) -> dict[str, bytes | None]:
         if rev is None:
