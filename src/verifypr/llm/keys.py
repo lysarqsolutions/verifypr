@@ -117,7 +117,7 @@ def check_key(provider: str, key: str) -> KeyCheck:
         if provider == "anthropic" and key.startswith("sk-ant-"):
             hint = " This looks like a different kind of Anthropic token, not an API key."
         return KeyCheck(
-            warning=f"That doesn't look like a {provider} API key: {known[1]}.{hint} "
+            warning=f"That doesn't look like an API key for this provider: {known[1]}.{hint} "
             "Create one on the provider's API keys page."
         )
     return KeyCheck()
