@@ -62,9 +62,16 @@ def isolated_git_config(tmp_path_factory: pytest.TempPathFactory) -> Iterator[No
 
     previous_keyring = keyring.get_keyring()
     keyring.set_keyring(MemoryKeyring())
+    from verifypr import state, userstate  # noqa: F401  (import before unfreezing)
+    from verifypr.llm import keys
+
+    state.unfreeze()
+    keys._session.clear()
     try:
         yield
     finally:
+        state.unfreeze()
+        keys._session.clear()
         keyring.set_keyring(previous_keyring)
         os.environ.clear()
         os.environ.update(saved)

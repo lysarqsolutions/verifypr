@@ -78,6 +78,9 @@ class Hunk(_Model):
     removed_at: tuple[int, ...] = Field(
         default=(), description="Old-file line number per removed line."
     )
+    raw: tuple[str, ...] = Field(
+        default=(), repr=False, description="The hunk exactly as in the diff (for undo patches)."
+    )
 
 
 class FileChange(_Model):
@@ -94,6 +97,9 @@ class FileChange(_Model):
     lfs_pointer: bool = False
     added_lines: int = Field(default=0, ge=0)
     removed_lines: int = Field(default=0, ge=0)
+    patch_header: tuple[str, ...] = Field(
+        default=(), repr=False, description="The file's diff header lines (for undo patches)."
+    )
 
 
 class Evidence(_Model):
@@ -163,6 +169,22 @@ class ClassifiedChange(_Model):
     ai: bool = Field(default=True, description="False when the AI couldn't check this part.")
 
 
+class Progress(_Model):
+    """Compared with the previous check of the same project ("Check again")."""
+
+    fixed: int = Field(ge=0)
+    still_open: int = Field(ge=0)
+    new: int = Field(ge=0)
+    previous: int = Field(ge=0)
+
+    def text(self) -> str:
+        issue = "issue" if self.new == 1 else "issues"
+        return (
+            f"Fixed {self.fixed} of {self.previous} · {self.still_open} still open · "
+            f"{self.new} new {issue}"
+        )
+
+
 class Report(_Model):
     schema_version: str = SCHEMA_VERSION
     verdict: Verdict
@@ -181,6 +203,10 @@ class Report(_Model):
     ai_model: str | None = None
     ai_tokens: int = Field(default=0, ge=0)
     ai_cost: str | None = Field(default=None, description="Estimated cost of the AI calls.")
+    kept_count: int = Field(default=0, ge=0, description="Findings marked 'It's fine'.")
+    progress: Progress | None = None
+    view_only: bool = False
+    offline: bool = False
     attention_count: int = Field(
         default=0, ge=0, description="Findings that made the verdict WARN or FAIL."
     )

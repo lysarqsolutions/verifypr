@@ -236,8 +236,10 @@ class LocalGit:
         binary = size > MAX_UNTRACKED_BYTES or b"\0" in head
         lfs = head.startswith(_LFS_HEADER)
         lines: list[str] = []
+        ends_with_newline = True
         if not binary and full.is_file():
             text = full.read_bytes().decode("utf-8", errors="replace")
+            ends_with_newline = text.endswith("\n")
             lines = text.split("\n")
             if lines and lines[-1] == "":
                 lines.pop()
@@ -250,6 +252,12 @@ class LocalGit:
             untracked=True,
             lfs_pointer=lfs,
             added_lines=len(lines),
+            patch_header=(
+                f"diff --git a/{path} b/{path}",
+                "new file mode 100644",
+                "--- /dev/null",
+                f"+++ b/{path}",
+            ),
         )
         hunks: tuple[Hunk, ...] = ()
         if lines and not lfs:
@@ -269,6 +277,11 @@ class LocalGit:
                     language=language_for(path),
                     added=tuple(lines),
                     added_at=tuple(range(1, len(lines) + 1)),
+                    raw=(
+                        f"@@ -0,0 +1,{len(lines)} @@",
+                        *(f"+{line}" for line in lines),
+                        *(() if ends_with_newline else ("\\ No newline at end of file",)),
+                    ),
                 ),
             )
         return ParsedFile(change=change, hunks=hunks)

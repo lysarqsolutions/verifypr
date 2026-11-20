@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from verifypr import userstate
 from verifypr.analysis.changes import ChangeSet
 from verifypr.config import Config, load_config
 from verifypr.detectors.base import DetectorContext
@@ -22,6 +23,7 @@ from verifypr.intent.propose import saved_contract
 from verifypr.llm.setup import LLMChoice, LLMSettings, SendSummary, choose_llm, estimate_cost
 from verifypr.models import InputLevel, Report
 from verifypr.sources.local_git import CompareOptions, LocalGit
+from verifypr.state import is_frozen
 from verifypr.verdict import apply_allow_rules, decide
 
 ConsentHook = Callable[[Path, SendSummary, bool], bool]
@@ -39,6 +41,8 @@ class CheckRequest:
     describe: str | None = None
     use_ai: bool = True
     use_saved_contract: bool = True
+    use_user_state: bool = True
+    offline: bool = False
     choose: Callable[[LLMSettings], LLMChoice] = choose_llm
     consent: ConsentHook = _deny
 
@@ -65,6 +69,9 @@ def _contract(request: CheckRequest, root: Path) -> IntentContract | None:
 
 def run_check(request: CheckRequest) -> tuple[Report, ChangeSet]:
     git, config, compare = _prepare(request)
+    if request.use_user_state:
+        extra = tuple(userstate.allow_rules(git.root))
+        config = config.model_copy(update={"allow": config.allow + extra})
     contract = _contract(request, git.root)
     changes = git.collect(compare)
     description = request.describe or (contract.goal if contract else None)
@@ -78,7 +85,9 @@ def run_check(request: CheckRequest) -> tuple[Report, ChangeSet]:
     model_name: str | None = None
     tokens = 0
     cost: str | None = None
-    if request.use_ai and not changes.is_empty:
+    if request.offline:
+        notes.append("Offline: nothing was sent anywhere; only rule-based checks ran.")
+    if request.use_ai and not request.offline and not changes.is_empty:
         choice = request.choose(config.llm)
         if choice.client is None:
             if choice.reason:
@@ -103,6 +112,9 @@ def run_check(request: CheckRequest) -> tuple[Report, ChangeSet]:
 
     kept, allowed = apply_allow_rules(findings + ai.findings, config.allow)
     allowed += len(context.suppressed)
+    marked_fine = userstate.kept_findings(git.root) if request.use_user_state else set()
+    kept_count = sum(1 for f in kept if f.id in marked_fine)
+    kept = [f for f in kept if f.id not in marked_fine]
     tolerances = contract.tolerances if contract else config.tolerances
     verdict, attention = decide(kept, tolerances, level)
     report = Report(
@@ -123,5 +135,16 @@ def run_check(request: CheckRequest) -> tuple[Report, ChangeSet]:
         ai_model=model_name,
         ai_tokens=tokens,
         ai_cost=cost,
+        kept_count=kept_count,
+        offline=request.offline,
+        view_only=is_frozen(),
     )
+    if request.use_user_state:
+        report = report.model_copy(
+            update={
+                "progress": userstate.progress(
+                    userstate.last_result(git.root), report, userstate.kept_findings(git.root)
+                )
+            }
+        )
     return report, changes

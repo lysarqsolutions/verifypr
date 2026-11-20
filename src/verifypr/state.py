@@ -1,7 +1,9 @@
 """The tool's own state folder — outside every repository, never inside it.
 
 Public interface: ``state_dir()``, ``repo_key(root)``, ``read_json(name)``,
-``write_json(name, data)``.
+``write_json(name, data)``, ``freeze()``, ``is_frozen()``.
+
+In View only mode (``freeze()``) writes stay in memory and vanish when the process ends.
 
 Location: ``VERIFYPR_STATE_DIR`` if set; otherwise the OS user-data folder
 (Windows ``%LOCALAPPDATA%\\verifypr``, macOS ``~/Library/Application Support/verifypr``,
@@ -36,7 +38,31 @@ def repo_key(root: Path) -> str:
     return hashlib.sha256(str(root.resolve()).lower().encode("utf-8")).hexdigest()[:16]
 
 
+_frozen = False
+_memory: dict[str, dict[str, Any]] = {}
+
+
+def freeze() -> None:
+    """View only: from now on nothing is written to disk; "saves" live in memory only."""
+    global _frozen
+    _frozen = True
+
+
+def unfreeze() -> None:
+    """For tests. Forget in-memory state and allow writes again."""
+    global _frozen
+    _frozen = False
+    _memory.clear()
+
+
+def is_frozen() -> bool:
+    return _frozen
+
+
 def read_json(name: str) -> dict[str, Any]:
+    if name in _memory:
+        copied: dict[str, Any] = json.loads(json.dumps(_memory[name]))
+        return copied
     path = state_dir() / name
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -46,6 +72,9 @@ def read_json(name: str) -> dict[str, Any]:
 
 
 def write_json(name: str, data: dict[str, Any]) -> None:
+    if _frozen:
+        _memory[name] = json.loads(json.dumps(data))
+        return
     folder = state_dir()
     folder.mkdir(parents=True, exist_ok=True)
     tmp = folder / f".{name}.tmp"

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import sys
 from collections.abc import Callable
 from enum import Enum
@@ -21,7 +22,7 @@ from pathlib import Path
 
 import typer
 
-from verifypr import __version__
+from verifypr import __version__, userstate
 from verifypr.errors import VerifyPRError
 from verifypr.llm.setup import (
     LLMChoice,
@@ -33,9 +34,12 @@ from verifypr.llm.setup import (
 )
 from verifypr.models import ChangeKind, Verdict
 from verifypr.pipeline import CheckRequest, collect_changes, run_check
+from verifypr.render.agent_prompt import agent_prompt
+from verifypr.render.html import render_html
 from verifypr.render.markdown import render_markdown
 from verifypr.render.text import render_text
-from verifypr.sources.local_git import CompareOptions
+from verifypr.sources.local_git import CompareOptions, LocalGit
+from verifypr.state import freeze, is_frozen
 
 EXIT_CODES = {Verdict.PASS: 0, Verdict.WARN: 1, Verdict.FAIL: 2}
 EXIT_ERROR = 3
@@ -110,12 +114,50 @@ def _chooser(provider: str | None, model: str | None) -> Callable[[LLMSettings],
     return choose
 
 
-def _check(request: CheckRequest, fmt: OutputFormat, verbose: bool) -> None:
+ViewOnlyOpt = typer.Option(
+    False, "--view-only", help="Look only: nothing is changed or saved (env VERIFYPR_VIEW_ONLY=1)."
+)
+OfflineOpt = typer.Option(
+    False, "--offline", help="Send nothing anywhere (rule-based checks only)."
+)
+
+
+def view_only_requested(flag: bool) -> bool:
+    return flag or os.environ.get("VERIFYPR_VIEW_ONLY", "").strip().lower() in {"1", "true", "yes"}
+
+
+def _apply_view_only(flag: bool) -> bool:
+    on = view_only_requested(flag)
+    if on:
+        freeze()
+    return on
+
+
+def _refuse_in_view_only(what: str) -> None:
+    if is_frozen() or view_only_requested(False):
+        _fail(VerifyPRError(f"View only is on — nothing can be changed or saved ({what})."))
+
+
+def _check(
+    request: CheckRequest,
+    fmt: OutputFormat,
+    verbose: bool,
+    *,
+    report_path: Path | None = None,
+    agent_only: bool = False,
+) -> None:
     try:
         report, _changes = run_check(request)
     except VerifyPRError as err:
         _fail(err)
         return
+    userstate.save_result(LocalGit.open(request.repo).root, report)
+    if report_path is not None:
+        report_path.write_text(render_html(report), encoding="utf-8")
+        typer.echo(f"Report saved to {report_path}", err=True)
+    if agent_only:
+        typer.echo(agent_prompt(report) or "Nothing to fix — no changes need undoing.", nl=False)
+        raise typer.Exit(EXIT_CODES[report.verdict])
     if fmt is OutputFormat.JSON:
         typer.echo(report.model_dump_json(indent=2))
     elif fmt is OutputFormat.MARKDOWN:
@@ -133,16 +175,22 @@ def root(
     describe: str | None = DescribeOpt,
     fmt: OutputFormat = FormatOpt,
     verbose: bool = VerboseOpt,
+    view_only: bool = ViewOnlyOpt,
+    offline: bool = OfflineOpt,
     version: bool = typer.Option(
         False, "--version", callback=_version_callback, is_eager=True, help="Show the version."
     ),
 ) -> None:
     """Check your changes (same as `verifypr check`)."""
+    if view_only:
+        _apply_view_only(True)
     if ctx.invoked_subcommand is None:
+        _apply_view_only(False)
         request = CheckRequest(
             repo=repo,
             compare=CompareOptions(base=base),
             describe=describe,
+            offline=offline,
             choose=_chooser(None, None),
             consent=ask_consent,
         )
@@ -169,8 +217,17 @@ def check(
     no_llm: bool = typer.Option(False, "--no-llm", help="Use only rule-based checks."),
     provider: str | None = typer.Option(None, "--provider", help="AI provider, e.g. anthropic."),
     model: str | None = typer.Option(None, "--model", help="AI model name."),
+    view_only: bool = ViewOnlyOpt,
+    offline: bool = OfflineOpt,
+    report: Path | None = typer.Option(
+        None, "--report", help="Also save a shareable HTML report to this file."
+    ),
+    agent: bool = typer.Option(
+        False, "--agent-prompt", help="Print only the 'tell the agent to fix this' text."
+    ),
 ) -> None:
     """Advanced: check changes with extra options."""
+    _apply_view_only(view_only)
     if staged and (head or committed_only):
         _fail(VerifyPRError("--staged can't be combined with --head or --committed-only."))
     compare = CompareOptions(base=base, head=head, staged=staged, committed_only=committed_only)
@@ -180,10 +237,11 @@ def check(
         contract_path=review_contract,
         describe=describe,
         use_ai=not no_llm,
+        offline=offline,
         choose=_chooser(provider, model),
         consent=ask_consent,
     )
-    _check(request, fmt, verbose)
+    _check(request, fmt, verbose, report_path=report, agent_only=agent)
 
 
 @app.command()
@@ -266,6 +324,7 @@ ProviderArg = typer.Argument("anthropic", help="anthropic, openai, azure, openro
 @key_app.command("set")
 def key_set(provider: str = ProviderArg) -> None:
     """Save a key in the OS keychain (you'll be asked for it; it's never shown)."""
+    _refuse_in_view_only("keys can't be saved")
     from verifypr.llm.keys import KeychainUnavailableError, masked, save_key
 
     secret = typer.prompt(f"Paste your {provider} API key", hide_input=True).strip()
@@ -299,6 +358,7 @@ def key_status() -> None:
 @key_app.command("remove")
 def key_remove(provider: str = ProviderArg) -> None:
     """Remove a saved key from the OS keychain."""
+    _refuse_in_view_only("keys can't be removed")
     from verifypr.llm.keys import remove_key
 
     if remove_key(provider):
@@ -384,6 +444,9 @@ def intent_init(
     typer.echo("Proposed scope for this change (edit and pass it with --review-contract,")
     typer.echo("or save it so every check uses it):\n")
     typer.echo(contract_yaml(contract))
+    if is_frozen() or view_only_requested(False):
+        typer.echo("View only is on — this scope wasn't saved.")
+        return
     if save or (_interactive() and typer.confirm("Save this for this project?", default=True)):
         save_contract(git.root, contract)
         typer.echo("✔ Saved (outside your repository). Remove it with `verifypr intent clear`.")
@@ -407,6 +470,7 @@ def intent_show(repo: Path = RepoOpt) -> None:
 @intent_app.command("clear")
 def intent_clear(repo: Path = RepoOpt) -> None:
     """Remove the saved scope for this project."""
+    _refuse_in_view_only("the saved scope can't be removed")
     from verifypr.intent.propose import clear_contract
     from verifypr.sources.local_git import LocalGit
 
@@ -416,6 +480,89 @@ def intent_clear(repo: Path = RepoOpt) -> None:
         _fail(err)
         return
     typer.echo("✔ Removed." if clear_contract(root) else "No saved scope for this project.")
+
+
+@app.command("export-patch")
+def export_patch(
+    repo: Path = RepoOpt,
+    base: str | None = BaseOpt,
+    describe: str | None = DescribeOpt,
+    finding: list[str] = typer.Option(
+        [], "--finding", help="Finding id to undo (repeatable). Default: changes not asked for."
+    ),
+    no_llm: bool = typer.Option(False, "--no-llm", help="Use only rule-based checks."),
+    output: Path | None = typer.Option(
+        None, "--output", "-o", help="Write the patch to this file (recommended on Windows)."
+    ),
+) -> None:
+    """Advanced: print a patch that undoes changes (VerifyPR never applies it)."""
+    from verifypr.analysis.undo import by_hand_message, how_to, undo_for_findings
+    from verifypr.render.agent_prompt import fixable
+
+    request = CheckRequest(
+        repo=repo,
+        compare=CompareOptions(base=base),
+        describe=describe,
+        use_ai=not no_llm,
+        choose=_chooser(None, None),
+        consent=ask_consent,
+    )
+    try:
+        report, changes = run_check(request)
+    except VerifyPRError as err:
+        _fail(err)
+        return
+    wanted = [f for f in report.findings if f.id in finding] if finding else fixable(report)
+    result = undo_for_findings(changes, wanted)
+    if not result.patch:
+        typer.echo(
+            by_hand_message(result.by_hand) if result.by_hand else "Nothing to undo.", err=True
+        )
+        raise typer.Exit(0)
+    if output is not None:
+        output.write_text(result.patch, encoding="utf-8", newline="")
+        typer.echo(f"Undo patch saved to {output}.", err=True)
+    else:
+        # Raw bytes: text-mode stdout on Windows would turn \n into \r\n and break git apply.
+        sys.stdout.buffer.write(result.patch.encode("utf-8"))
+        sys.stdout.flush()
+    typer.echo(how_to(str(output) if output is not None else None), err=True)
+
+
+@app.command()
+def ui(
+    repo: Path = RepoOpt,
+    base: str | None = BaseOpt,
+    port: int = typer.Option(0, "--port", help="Port (default: a free one)."),
+    no_browser: bool = typer.Option(False, "--no-browser", help="Don't open a browser."),
+    view_only: bool = ViewOnlyOpt,
+    offline: bool = OfflineOpt,
+) -> None:
+    """Open the VerifyPR page in your browser (runs only on this computer)."""
+    try:
+        from verifypr.server.app import serve
+    except ImportError:
+        _fail(
+            VerifyPRError(
+                "The web page needs a few extra packages.",
+                hint='Install them with: pip install "verifypr[ui]"',
+            )
+        )
+        return
+    locked = _apply_view_only(view_only)
+    try:
+        root = LocalGit.open(repo).root
+    except VerifyPRError as err:
+        _fail(err)
+        return
+    serve(
+        root,
+        base=base,
+        port=port,
+        open_browser=not no_browser,
+        view_only_locked=locked,
+        offline=offline,
+    )
 
 
 def _utf8_output() -> None:

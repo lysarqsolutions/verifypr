@@ -31,6 +31,10 @@ DEFAULT_COMMANDS: list[list[str]] = [
     ["check", "--describe", "Add averages"],
     ["intent", "show"],
     ["key", "status"],
+    ["--view-only"],
+    ["check", "--offline"],
+    ["check", "--agent-prompt"],
+    ["export-patch"],
 ]
 
 

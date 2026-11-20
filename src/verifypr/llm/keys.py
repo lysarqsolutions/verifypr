@@ -78,7 +78,14 @@ def anthropic_login() -> str | None:
 
 def save_key(provider: str, key: str) -> None:
     """Store in the OS keychain. Raises ``KeychainUnavailableError`` instead of falling back
-    to a file."""
+    to a file. In View only mode nothing is saved (use ``remember_for_session``)."""
+    from verifypr.state import is_frozen
+
+    if is_frozen():
+        raise KeychainUnavailableError(
+            "View only is on — nothing can be changed or saved. The key is kept for this "
+            "session only."
+        )
     try:
         import keyring
 

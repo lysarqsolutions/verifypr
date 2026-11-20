@@ -36,7 +36,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ui = [
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
+]
 dev = [
+    "verifypr[ui]",
     "pytest>=9.0.3,<10",
     "pytest-cov>=7,<8",
     "ruff>=0.6,<1",

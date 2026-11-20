@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>VerifyPR</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/strings.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to results</a>
+  <header class="top">
+    <div class="brand">VerifyPR <span id="project" class="muted"></span></div>
+    <div class="compare">
+      <label for="base" id="compare-label">Comparing your work with</label>
+      <select id="base"></select>
+    </div>
+    <div class="top-actions">
+      <span id="viewonly-badge" class="badge" hidden></span>
+      <button id="open-settings" type="button" class="ghost">Settings</button>
+      <button id="open-help" type="button" class="ghost" aria-keyshortcuts="?">Keys (?)</button>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <section id="status" aria-live="polite" aria-busy="true">
+      <p id="status-label" class="status"></p>
+      <h1 id="headline"></h1>
+      <p id="compared" class="muted"></p>
+      <p id="against"></p>
+      <p id="progress"></p>
+      <ul id="notes" class="notes"></ul>
+    </section>
+
+    <section id="summary" hidden aria-labelledby="top-title">
+      <h2 id="top-title"></h2>
+      <ol id="top-issues" class="issues"></ol>
+      <div id="maybe-wrap" hidden>
+        <h3 id="maybe-title"></h3>
+        <ul id="maybe" class="issues"></ul>
+      </div>
+      <div id="checks-wrap" hidden>
+        <h2 id="checks-title"></h2>
+        <p id="checks-progress" class="muted" aria-live="polite"></p>
+        <ul id="checks" class="checks"></ul>
+      </div>
+      <div class="row main-actions">
+        <button id="agent-btn" type="button" class="primary"></button>
+        <button id="all-btn" type="button" aria-controls="details" aria-expanded="false"></button>
+        <button id="stricter-btn" type="button" aria-controls="stricter" aria-expanded="false"></button>
+        <button id="again-btn" type="button" class="ghost"></button>
+      </div>
+      <p id="copied" class="muted" role="status"></p>
+    </section>
+
+    <section id="wizard" class="card" hidden aria-labelledby="wizard-title">
+      <h2 id="wizard-title"></h2>
+      <p id="wizard-text"></p>
+      <div class="row">
+        <button id="wizard-setup" type="button"></button>
+        <button id="wizard-skip" type="button" class="ghost"></button>
+      </div>
+    </section>
+
+    <section id="stricter" class="card" hidden aria-labelledby="stricter-title">
+      <h2 id="stricter-title"></h2>
+      <label for="describe" id="describe-label"></label>
+      <textarea id="describe" rows="3"></textarea>
+      <div class="row">
+        <button id="describe-check" type="button" class="primary"></button>
+        <button id="suggest-btn" type="button"></button>
+      </div>
+      <div id="scope-editor" hidden>
+        <h3 id="scope-title"></h3>
+        <label for="scope-allowed" id="scope-allowed-label"></label>
+        <input id="scope-allowed" type="text">
+        <label for="scope-forbidden" id="scope-forbidden-label"></label>
+        <input id="scope-forbidden" type="text">
+        <div class="row">
+          <button id="scope-save" type="button" class="primary" data-write></button>
+        </div>
+      </div>
+      <p id="scope-msg" class="muted" role="status"></p>
+    </section>
+
+    <section id="details" hidden aria-labelledby="details-title">
+      <h2 id="details-title"></h2>
+      <div class="filters" role="group" aria-label="Filter">
+        <button type="button" data-filter="all" aria-pressed="true"></button>
+        <button type="button" data-filter="tidy" aria-pressed="false"></button>
+        <button type="button" data-filter="tests" aria-pressed="false"></button>
+        <button type="button" data-filter="scope" aria-pressed="false"></button>
+      </div>
+      <div id="groups"></div>
+      <details id="numbers-wrap">
+        <summary id="numbers-title"></summary>
+        <p id="numbers"></p>
+      </details>
+    </section>
+  </main>
+
+  <footer class="bottom">
+    <button id="agent-btn-2" type="button" class="primary"></button>
+    <button id="pr-summary-btn" type="button"></button>
+    <span class="share">
+      <span id="share-label"></span>
+      <button type="button" data-report="html">HTML</button>
+      <button type="button" data-report="md">Markdown</button>
+      <button type="button" data-report="json">JSON</button>
+    </span>
+    <details class="advanced" data-write>
+      <summary id="advanced-label"></summary>
+      <button id="patch-btn" type="button"></button>
+      <p id="patch-help" class="muted"></p>
+    </details>
+  </footer>
+
+  <dialog id="consent" aria-labelledby="consent-title">
+    <h2 id="consent-title"></h2>
+    <p id="consent-text"></p>
+    <div class="row">
+      <button id="consent-yes" type="button" class="primary"></button>
+      <button id="consent-no" type="button"></button>
+    </div>
+  </dialog>
+
+  <dialog id="settings" aria-labelledby="settings-title">
+    <div class="dialog-head">
+      <h2 id="settings-title"></h2>
+      <button id="close-settings" type="button" class="ghost"></button>
+    </div>
+    <section aria-labelledby="ai-title">
+      <h3 id="ai-title"></h3>
+      <p id="ai-offline" class="muted" hidden></p>
+      <ul id="provider-status" class="plain"></ul>
+      <div id="ai-form">
+        <label for="provider" id="provider-label"></label>
+        <select id="provider"></select>
+        <label for="api-key" id="key-label"></label>
+        <div class="row">
+          <input id="api-key" type="password" autocomplete="off" spellcheck="false">
+          <button id="key-show" type="button" class="ghost" aria-pressed="false"></button>
+        </div>
+        <a id="key-where" href="#" target="_blank" rel="noopener noreferrer"></a>
+        <label class="inline" id="remember-wrap"><input id="remember" type="checkbox" checked> <span id="remember-label"></span></label>
+        <div class="row">
+          <button id="key-save" type="button" class="primary"></button>
+          <button id="key-test" type="button"></button>
+          <button id="key-remove" type="button" class="ghost"></button>
+        </div>
+        <p id="key-msg" role="status"></p>
+      </div>
+    </section>
+    <section aria-labelledby="rules-title">
+      <h3 id="rules-title"></h3>
+      <ul id="rules" class="plain"></ul>
+      <button id="rules-export" type="button"></button>
+    </section>
+    <section aria-labelledby="kept-title">
+      <h3 id="kept-title"></h3>
+      <ul id="kept" class="plain"></ul>
+    </section>
+    <section aria-labelledby="saved-scope-title">
+      <h3 id="saved-scope-title"></h3>
+      <p id="saved-scope"></p>
+      <button id="scope-clear" type="button" class="ghost"></button>
+    </section>
+    <section aria-labelledby="vo-title">
+      <h3 id="vo-title"></h3>
+      <p id="vo-text" class="muted"></p>
+      <button id="vo-on" type="button"></button>
+    </section>
+  </dialog>
+
+  <dialog id="help" aria-labelledby="help-title">
+    <h2 id="help-title"></h2>
+    <ul id="help-list" class="plain"></ul>
+    <div class="row">
+      <button id="shortcuts-off" type="button" aria-pressed="false"></button>
+      <button id="close-help" type="button"></button>
+    </div>
+  </dialog>
+</body>
+</html>

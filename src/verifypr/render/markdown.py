@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from verifypr import __version__
 from verifypr.models import Classification, Report, Verdict
+from verifypr.render.agent_prompt import agent_prompt
 from verifypr.render.text import checked_against, importance, numbers, report_headline, where
 
 _ICON = {Verdict.PASS: "✅", Verdict.WARN: "⚠️", Verdict.FAIL: "⛔"}
@@ -40,6 +41,13 @@ def render_markdown(report: Report) -> str:
     if checks:
         out += ["", "### ✅ Please check before approving"]
         out += [f"- [ ] {item}" for item in checks]
+    prompt = agent_prompt(report)
+    if prompt:
+        out += [
+            "",
+            "**Next step:** paste the prompt below into your coding agent, or mark items as "
+            "fine with `verifypr ui`.",
+        ]
 
     if ranked:
         out += [
@@ -73,8 +81,10 @@ def render_markdown(report: Report) -> str:
             f"{len(ranked)} findings · {report.allowed_count} allowed by your rules"
             + (f"  \n{numbers(report)}" if numbers(report) else ""),
             "",
-            "</details>",
         ]
+        if prompt:
+            out += ["### Prompt for your coding agent", "```text", prompt.rstrip(), "```", ""]
+        out += ["</details>"]
 
     depth = (
         f"model: {report.ai_model} · tokens: {report.ai_tokens:,}"

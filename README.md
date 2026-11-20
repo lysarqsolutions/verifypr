@@ -1,6 +1,6 @@
 # VerifyPR
 
-> **Status: pre-alpha (Phase 3 — rule-based + AI intent checks).** Usable for early testing; expect changes.
+> **Status: pre-alpha (Phase 4 — local web page and reports).** Usable for early testing; expect changes.
 
 ## Try it
 
@@ -15,6 +15,51 @@ verifypr
 Run it inside your project folder. It compares your branch, unsaved changes, and new files with `main` (or `master`/`develop`) and prints a short summary plus a "Please check before approving" list. Add `--verbose` to see everything, or `--format markdown` / `--format json`.
 
 Exit codes: `0` looks fine · `1` needs your attention · `2` don't merge yet · `3` couldn't run.
+
+### The web page
+
+```bash
+pip install -e ".[ui]"
+```
+
+```bash
+verifypr ui
+```
+
+This opens a page in your browser (only on this computer, `127.0.0.1`) that has already
+checked your changes. From there you can mark items as fine, always allow a kind of change
+in a folder, copy a ready-to-paste prompt that tells your coding agent what to fix, press
+**Check again** to see "Fixed 2 of 3 · 1 still open", and share the report as HTML,
+Markdown or JSON. Press `?` for keyboard shortcuts.
+
+### View only
+
+```bash
+verifypr --view-only
+```
+
+Works on every command (`verifypr ui --view-only`) or with `VERIFYPR_VIEW_ONLY=1`. Nothing is
+changed or saved anywhere — not in your project and not in VerifyPR's own settings.
+Add `--offline` as well and nothing leaves your computer: only the rule-based checks run.
+
+### Reports and the agent prompt
+
+```bash
+verifypr check --report report.html
+```
+
+```bash
+verifypr check --agent-prompt
+```
+
+The first writes a shareable HTML report (to the path you give). The second prints a
+prompt you can paste into your coding agent listing the changes that weren't asked for.
+
+To undo selected changes yourself, `verifypr export-patch -o undo.patch` writes a patch
+that you review and apply with `git apply -R undo.patch`. VerifyPR never applies it.
+(Use `-o` on Windows: redirecting with `>` in PowerShell changes the line endings.)
+
+### A stricter check
 
 Tell it what the change was for to get a stricter check:
 

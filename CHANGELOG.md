@@ -6,6 +6,43 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed — Phase 4 review
+- "Always allow this kind of change here" covers only that one file for serious findings
+  (e.g. a committed secret), never the whole folder.
+- With basic checks only, a clean result's label reads "No problems found", not "Looks
+  good". The page now gets its headline and label from the same code as the terminal.
+- New card button: **Add to "what this change should do"**.
+- `export-patch -o FILE` prints the exact `git apply -R "FILE"` command, and changes a
+  patch can't undo (binary, permission-only) are listed to undo by hand.
+- Test connection refuses unknown providers; in View only the undo steps don't mention
+  the (hidden) patch download.
+- Web framework telemetry (OpenTelemetry in newer FastAPI) is switched off explicitly.
+
+### Added — Phase 4 (local web page and reports)
+- `verifypr ui` (`pip install "verifypr[ui]"`): a page on `127.0.0.1` with a per-session
+  token, strict security headers, and paths kept inside your project. The check has
+  already run when it opens: headline, up to 3 top issues, "Please check before
+  approving", and all changes grouped by **Not asked for → Not sure → Needed for the
+  change → Asked for**, with filters, a "Why?" and the code for each.
+- Next steps on every item: **It's fine, keep it** (undo it later in Settings),
+  **Always allow this kind of change here**, **Copy undo steps**, **Open in editor**.
+- **Tell the agent to fix this** copies a prompt listing the changes not asked for, the
+  problems to fix, and the changes to confirm. Also `verifypr check --agent-prompt`.
+- **Check again** shows "Fixed 2 of 3 · 1 still open · 1 new issue" (in the terminal too).
+  Items you mark as fine are not counted as fixed.
+- AI helper setup in Settings: pick a provider, paste a key (stored in the OS keychain or
+  for this session only, never shown again in full), test the connection. Consent before
+  the first send. An optional, skippable AI setup card appears below the results.
+- **View only** (`--view-only`, `VERIFYPR_VIEW_ONLY=1`, or the page toggle): nothing is
+  changed or saved anywhere; every saving action is hidden and refused. `--offline` turns
+  off all network use.
+- Reports: `check --report report.html` (self-contained, no scripts), Markdown with a
+  "Next step" and the agent prompt, and HTML/Markdown/JSON downloads from the page.
+- `verifypr export-patch`: a patch that undoes selected changes, for you to review and
+  apply with `git apply -R`. VerifyPR never applies it.
+- Accessible: keyboard shortcuts (can be turned off), screen-reader labels, visible
+  focus, reduced motion, dark mode, narrow windows. All page text is in one file.
+
 ### Fixed — Phase 3 review
 - Secrets in commit messages, branch names, `--describe` text and saved scopes are now
   removed before anything is sent to the AI (only changed code lines were before).

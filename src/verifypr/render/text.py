@@ -19,6 +19,17 @@ def report_headline(report: Report) -> str:
     return headline(report.verdict, report.attention_count, ai_used=report.ai_used)
 
 
+def status_label(report: Report) -> str:
+    """The one status word(s) next to the headline. Basic checks never say "Looks good"."""
+    if report.file_count == 0:
+        return "Nothing to check"
+    if report.verdict is Verdict.FAIL:
+        return "Don't merge yet"
+    if report.verdict is Verdict.WARN:
+        return "Needs attention"
+    return "Looks good" if report.ai_used else "No problems found"
+
+
 def importance(finding: Finding) -> str:
     return f"{severity_label(finding.severity)} · {confidence_label(finding.confidence)}"
 
@@ -35,6 +46,12 @@ def where(finding: Finding, limit: int = 3) -> str:
         spots.append(f"{ev.file_path}:{lines}")
     more = len(finding.evidence) - limit
     return ", ".join(spots) + (f" and {more} more" if more > 0 else "")
+
+
+def view_only_badge(report: Report) -> str:
+    if report.offline:
+        return "👁 View only · Offline — nothing leaves this computer"
+    return "👁 View only — nothing will be changed or saved"
 
 
 def checked_against(report: Report) -> str:
@@ -70,12 +87,16 @@ def depth_line(report: Report) -> str:
 
 def render_text(report: Report, *, verbose: bool = False) -> str:
     out: list[str] = []
+    if report.view_only:
+        out.append(view_only_badge(report))
     icon = "•" if report.file_count == 0 else STATUS_ICON[report.verdict]
     out.append(f"{icon} {report_headline(report)}")
     if report.file_count:
         out.append(f"  {report.compared}")
     if report.file_count and report.intent:
         out.append(f"  {checked_against(report)}")
+    if report.progress:
+        out.append(f"  Since your last check: {report.progress.text()}")
     for note in report.notes:
         out.append(f"  Note: {note}")
     if report.file_count == 0:
@@ -117,6 +138,12 @@ def render_text(report: Report, *, verbose: bool = False) -> str:
         out.append(
             f"{hidden} more {'finding' if hidden == 1 else 'findings'} — "
             "run `verifypr --verbose` to see everything."
+        )
+    if report.kept_count:
+        n = report.kept_count
+        out.append(
+            f"{n} {'item' if n == 1 else 'items'} you marked as fine "
+            f"{'is' if n == 1 else 'are'} hidden."
         )
     if report.allowed_count:
         n = report.allowed_count

@@ -90,6 +90,7 @@ class _Builder:
     renamed: bool = False
     hunks: list[Hunk] = field(default_factory=list)
     seen_ids: dict[str, int] = field(default_factory=dict)
+    header_lines: list[str] = field(default_factory=list)
 
     @property
     def path(self) -> str:
@@ -138,6 +139,7 @@ class _Builder:
             lfs_pointer=first_added.rstrip("\r") == _LFS_HEADER,
             added_lines=added_lines,
             removed_lines=removed_lines,
+            patch_header=tuple(self.header_lines),
         )
         hunks = tuple(
             h.model_copy(update={"file_path": path, "change_kind": kind}) for h in self.hunks
@@ -146,6 +148,7 @@ class _Builder:
 
 
 def _parse_hunk(lines: list[str], i: int, header: re.Match[str], b: _Builder) -> int:
+    first = i - 1  # the @@ line
     old_start, new_start = int(header.group(1)), int(header.group(3))
     old_count = int(header.group(2)) if header.group(2) is not None else 1
     new_count = int(header.group(4)) if header.group(4) is not None else 1
@@ -198,6 +201,7 @@ def _parse_hunk(lines: list[str], i: int, header: re.Match[str], b: _Builder) ->
             removed=tuple(removed),
             added_at=tuple(added_at),
             removed_at=tuple(removed_at),
+            raw=tuple(lines[first:i]),
         )
     )
     return i
@@ -243,6 +247,7 @@ def parse_diff(text: str) -> list[ParsedFile]:
             if current is not None:
                 files.append(current.build())
             current = _Builder()
+            current.header_lines.append(line)
             current.header_old, current.header_new = _header_paths(line[len("diff --git ") :])
             i += 1
             continue
@@ -254,6 +259,8 @@ def parse_diff(text: str) -> list[ParsedFile]:
             i = _parse_hunk(lines, i + 1, header, current)
             continue
         _apply_header(line, current)
+        if not current.hunks:
+            current.header_lines.append(line)
         i += 1
     if current is not None:
         files.append(current.build())
