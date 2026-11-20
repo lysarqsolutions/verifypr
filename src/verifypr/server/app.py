@@ -43,6 +43,7 @@ from verifypr.llm.keys import (
     NO_KEY_PROVIDERS,
     KeychainUnavailableError,
     anthropic_login,
+    check_key,
     masked,
     remember_for_session,
     remove_key,
@@ -139,7 +140,7 @@ class SuggestBody(BaseModel):
 
 class KeyBody(BaseModel):
     provider: str = Field(min_length=1, max_length=50)
-    key: str = Field(min_length=8, max_length=500, repr=False)
+    key: str = Field(min_length=1, max_length=2000, repr=False)
     remember: bool = True
 
 
@@ -561,15 +562,25 @@ def create_app(session: Session) -> FastAPI:
         if body.provider not in PROVIDERS:
             raise HTTPException(status_code=400, detail="Unknown provider.")
         secret = body.key.strip()
+        checked = check_key(body.provider, secret)
+        if checked.error:
+            raise HTTPException(status_code=400, detail=checked.error)
+        warning = f" {checked.warning} Use Test connection to check it." if checked.warning else ""
         if body.remember and not session.view_only:
             try:
                 save_key(body.provider, secret)
-                return {"ok": True, "masked": masked(secret), "saved": "keychain"}
+                return {
+                    "ok": True,
+                    "masked": masked(secret),
+                    "saved": "keychain",
+                    "note": warning.strip(),
+                }
             except KeychainUnavailableError as err:
                 remember_for_session(body.provider, secret)
-                return {"ok": True, "masked": masked(secret), "saved": "session", "note": str(err)}
+                note = f"{err}{warning}"
+                return {"ok": True, "masked": masked(secret), "saved": "session", "note": note}
         remember_for_session(body.provider, secret)
-        return {"ok": True, "masked": masked(secret), "saved": "session"}
+        return {"ok": True, "masked": masked(secret), "saved": "session", "note": warning.strip()}
 
     @app.post("/api/key/test")
     def key_test(body: ProviderBody) -> dict[str, Any]:

@@ -167,7 +167,7 @@ def test_no_llm_flag(repo_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 # ---- keys -------------------------------------------------------------------------------
 def test_key_set_status_remove_never_show_the_key() -> None:
-    secret = "sk-ant-" + "z9" * 20
+    secret = "sk-ant-api03-" + "z9" * 20
     set_out = runner.invoke(app, ["key", "set"], input=secret + "\n").output
     assert "Saved anthropic key …z9z9" in set_out
     status = runner.invoke(app, ["key", "status"]).output

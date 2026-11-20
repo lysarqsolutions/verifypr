@@ -11,6 +11,7 @@ command-line arguments.
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -74,6 +75,52 @@ def anthropic_login() -> str | None:
     if folder.is_dir() and any(folder.iterdir()):
         return "your `ant auth login` sign-in"
     return None
+
+
+@dataclass(frozen=True)
+class KeyCheck:
+    """Result of ``check_key``. Messages never contain the key itself."""
+
+    error: str | None = None  # don't save
+    warning: str | None = None  # save only if the user still wants to
+
+
+# Known key shapes. Only a warning on mismatch: providers add new formats over time.
+_KEY_PREFIXES = {
+    "anthropic": ("sk-ant-api", "Anthropic API keys start with sk-ant-api"),
+    "openai": ("sk-", "OpenAI API keys start with sk-"),
+    "openrouter": ("sk-or-", "OpenRouter keys start with sk-or-"),
+}
+MAX_KEY_LENGTH = 300
+
+
+def check_key(provider: str, key: str) -> KeyCheck:
+    """Catch keys that were mangled while pasting, or that aren't API keys at all."""
+    if not key:
+        return KeyCheck(error="No key was entered.")
+    if any(not (33 <= ord(ch) <= 126) for ch in key):
+        return KeyCheck(
+            error="That key contains spaces, line breaks or other characters that aren't part "
+            "of an API key. It may have been pasted twice or changed while pasting. Copy it "
+            "again and paste it once."
+        )
+    if len(key) > MAX_KEY_LENGTH and provider != "openai_compatible":  # may use long tokens
+        return KeyCheck(
+            error=f"That key is {len(key)} characters long, which is far longer than an API "
+            "key. It may have been pasted twice. Copy it again and paste it once."
+        )
+    if len(key) < 20:
+        return KeyCheck(error="That key is too short to be an API key. Check it was copied fully.")
+    known = _KEY_PREFIXES.get(provider)
+    if known and not key.startswith(known[0]):
+        hint = ""
+        if provider == "anthropic" and key.startswith("sk-ant-"):
+            hint = " This looks like a different kind of Anthropic token, not an API key."
+        return KeyCheck(
+            warning=f"That doesn't look like a {provider} API key: {known[1]}.{hint} "
+            "Create one on the provider's API keys page."
+        )
+    return KeyCheck()
 
 
 def save_key(provider: str, key: str) -> None:

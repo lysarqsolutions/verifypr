@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- `verifypr key set` and Settings refuse keys that were mangled while pasting (spaces,
+  line breaks, other stray characters, or far too long) and ask before saving one that
+  doesn't look like the provider's API key (e.g. an Anthropic key that doesn't start
+  with `sk-ant-api`). Found during the first live test. Messages never show the key.
+
 ### Fixed — Phase 4 review
 - "Always allow this kind of change here" covers only that one file for serious findings
   (e.g. a committed secret), never the whole folder.

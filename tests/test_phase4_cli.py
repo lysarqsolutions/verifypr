@@ -202,3 +202,64 @@ def test_binary_changes_are_listed_to_undo_by_hand(repo_dir: Path) -> None:
     result = undo_for_findings(changes, [finding])
     assert result.patch == ""
     assert result.by_hand == ("logo.png",)
+
+
+# ---- API key format check ---------------------------------------------------------------
+GOOD_KEY = "sk-ant-api03-" + "Ab9_" * 20
+
+
+@pytest.mark.parametrize(
+    ("key", "problem"),
+    [
+        ("", "No key was entered"),
+        (GOOD_KEY + chr(0xA0) + GOOD_KEY, "pasted twice"),
+        (GOOD_KEY + GOOD_KEY + GOOD_KEY + GOOD_KEY, "far longer"),
+        ("sk-ant-api03", "too short"),
+    ],
+)
+def test_broken_keys_are_refused(key: str, problem: str) -> None:
+    from verifypr.llm.keys import check_key
+
+    result = check_key("anthropic", key)
+    assert result.error is not None
+    assert problem in result.error
+    assert GOOD_KEY not in result.error
+
+
+def test_other_anthropic_tokens_get_a_warning() -> None:
+    from verifypr.llm.keys import check_key
+
+    result = check_key("anthropic", "sk-ant-usr-" + "x" * 90)
+    assert result.error is None
+    assert result.warning is not None
+    assert "start with sk-ant-api" in result.warning
+    assert "different kind of Anthropic token" in result.warning
+    assert check_key("anthropic", GOOD_KEY) == type(result)()
+    assert check_key("azure", "0123456789abcdef" * 2).warning is None
+
+
+def test_key_set_refuses_a_mangled_paste_and_saves_nothing() -> None:
+    from verifypr.llm.keys import resolve_key
+
+    result = runner.invoke(app, ["key", "set"], input=GOOD_KEY + chr(0xA0) + GOOD_KEY + "\n")
+    assert result.exit_code == 3
+    assert "Nothing was saved." in result.output
+    assert resolve_key("anthropic")[0] is None
+
+
+def test_key_set_asks_before_saving_an_odd_looking_key() -> None:
+    from verifypr.llm.keys import resolve_key
+
+    odd = "sk-ant-usr-" + "x" * 90
+    declined = runner.invoke(app, ["key", "set"], input=odd + "\nn\n")
+    assert declined.exit_code == 3
+    assert resolve_key("anthropic")[0] is None
+    accepted = runner.invoke(app, ["key", "set"], input=odd + "\ny\n")
+    assert accepted.exit_code == 0
+    assert resolve_key("anthropic")[0] == odd
+
+
+def test_long_tokens_are_fine_for_other_compatible_servers() -> None:
+    from verifypr.llm.keys import check_key
+
+    assert check_key("openai_compatible", "eyJ" + "a" * 900).error is None

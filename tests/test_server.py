@@ -200,7 +200,7 @@ def test_view_only_saves_nothing_anywhere(repo_dir: Path, tmp_path: Path) -> Non
     client.post("/api/consent", json={"allow": True})
     client.post("/api/check", json={})
     saved = client.post(
-        "/api/key", json={"provider": "anthropic", "key": "sk-ant-" + "q" * 30}
+        "/api/key", json={"provider": "anthropic", "key": "sk-ant-api03-" + "q" * 30}
     ).json()
     assert saved["saved"] == "session"
     assert client.get("/api/report.html").status_code == 200  # sharing is still allowed
@@ -222,7 +222,7 @@ def test_turning_view_only_on_from_the_page(repo_dir: Path) -> None:
 def test_keys_are_never_sent_back(repo_dir: Path) -> None:
     _repo(repo_dir)
     client, _ = _client(repo_dir)
-    secret = "sk-ant-" + "k3y" * 12
+    secret = "sk-ant-api03-" + "k3y" * 12
     saved = client.post("/api/key", json={"provider": "anthropic", "key": secret}).json()
     assert saved["saved"] == "keychain"
     assert saved["masked"] == "…3yk3y"[-5:] or saved["masked"].startswith("…")
@@ -438,3 +438,16 @@ def test_patch_with_nothing_to_undo_says_so(repo_dir: Path) -> None:
     res = client.get("/api/patch")
     assert res.status_code == 409
     assert res.json()["error"] == "Nothing to undo."
+
+
+def test_page_refuses_mangled_keys_and_warns_on_odd_ones(repo_dir: Path) -> None:
+    _repo(repo_dir)
+    client, _ = _client(repo_dir)
+    good = "sk-ant-api03-" + "Ab9_" * 20
+    res = client.post("/api/key", json={"provider": "anthropic", "key": good + "\n" + good})
+    assert res.status_code == 400
+    assert "pasted twice" in res.json()["error"]
+    assert good not in res.text
+    odd = client.post("/api/key", json={"provider": "anthropic", "key": "sk-ant-usr-" + "x" * 90})
+    assert odd.status_code == 200
+    assert "Test connection" in odd.json()["note"]

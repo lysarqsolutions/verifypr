@@ -325,11 +325,16 @@ ProviderArg = typer.Argument("anthropic", help="anthropic, openai, azure, openro
 def key_set(provider: str = ProviderArg) -> None:
     """Save a key in the OS keychain (you'll be asked for it; it's never shown)."""
     _refuse_in_view_only("keys can't be saved")
-    from verifypr.llm.keys import KeychainUnavailableError, masked, save_key
+    from verifypr.llm.keys import KeychainUnavailableError, check_key, masked, save_key
 
     secret = typer.prompt(f"Paste your {provider} API key", hide_input=True).strip()
-    if not secret:
-        _fail(VerifyPRError("No key was entered."))
+    checked = check_key(provider, secret)
+    if checked.error:
+        _fail(VerifyPRError(checked.error, hint="Nothing was saved."))
+    if checked.warning:
+        typer.echo(f"⚠ {checked.warning}", err=True)
+        if not typer.confirm("Save it anyway?", default=False):
+            _fail(VerifyPRError("Nothing was saved."))
     try:
         save_key(provider, secret)
     except KeychainUnavailableError as err:
