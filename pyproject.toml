@@ -44,7 +44,7 @@ dev = [
     "verifypr[ui]",
     "pytest>=9.0.3,<10",
     "pytest-cov>=7,<8",
-    "ruff>=0.6,<1",
+    "ruff>=0.17.5,<1",
     "mypy>=1.10,<2",
     "types-PyYAML>=6.0,<7",
     "pip-audit>=2.7,<3",
