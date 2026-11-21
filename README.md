@@ -1,6 +1,6 @@
 # VerifyPR
 
-> **Status: pre-alpha (Phase 4 — local web page and reports).** Usable for early testing; expect changes.
+> **Status: v0.1.0, pre-alpha — first public release ("Did it stay in scope?").** Usable for early testing; expect changes. Feedback welcome via issues ("False alarm" / "Missed change").
 
 ## Try it
 

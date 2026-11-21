@@ -6,11 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-21
+
+First public release: "Did it stay in scope?" (phases 0-4).
+
 ### Changed
 - Version set to 0.1.0 (the 0.0.1 name placeholder is already on PyPI); package
   metadata links to the GitHub repository and issue tracker.
 
 ### Fixed
+- Every git command VerifyPR runs turns off git's automatic background maintenance,
+  so a check can never start writes in `.git` (seen on macOS CI).
 - `verifypr key set` and Settings refuse keys that were mangled while pasting (spaces,
   line breaks, other stray characters, or far too long) and ask before saving one that
   doesn't look like the provider's API key (e.g. an Anthropic key that doesn't start
@@ -165,3 +171,6 @@ All notable changes to this project are documented here. The format follows
   license allow-list, secret scan, and DCO sign-off check.
 - Open-source repo files: Apache-2.0 license, contributing guide, security policy,
   issue templates (bug, false alarm, missed change), PR template, Dependabot.
+
+[Unreleased]: https://github.com/lysarqsolutions/verifypr/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/lysarqsolutions/verifypr/releases/tag/v0.1.0
