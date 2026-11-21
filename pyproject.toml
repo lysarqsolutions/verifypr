@@ -51,6 +51,12 @@ dev = [
     "pip-licenses>=4.4,<6",
 ]
 
+[project.urls]
+Homepage = "https://github.com/lysarqsolutions/verifypr"
+Repository = "https://github.com/lysarqsolutions/verifypr"
+Issues = "https://github.com/lysarqsolutions/verifypr/issues"
+Changelog = "https://github.com/lysarqsolutions/verifypr/blob/main/CHANGELOG.md"
+
 [project.scripts]
 verifypr = "verifypr.cli:main"
 

@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- Version set to 0.1.0 (the 0.0.1 name placeholder is already on PyPI); package
+  metadata links to the GitHub repository and issue tracker.
+
 ### Fixed
 - `verifypr key set` and Settings refuse keys that were mangled while pasting (spaces,
   line breaks, other stray characters, or far too long) and ask before saving one that
