@@ -82,3 +82,15 @@ def repo_dir(tmp_path: Path) -> Path:
     path = tmp_path / "project"
     path.mkdir()
     return path
+
+
+def pytest_runtest_logreport(report: pytest.TestReport) -> None:
+    """On GitHub Actions, turn each failing test into an annotation, so failures can be read
+    without opening the job log (logs need a signed-in account; annotations don't)."""
+    if os.environ.get("GITHUB_ACTIONS") != "true" or not report.failed:
+        return
+    path, line, _ = report.location
+    text = str(report.longrepr).strip().splitlines()
+    tail = " | ".join(text[-6:])[:900]
+    tail = tail.replace("%", "%25").replace("\r", "").replace("\n", " ")
+    print(f"\n::error file={path},line={(line or 0) + 1},title={report.nodeid}::{tail}")
