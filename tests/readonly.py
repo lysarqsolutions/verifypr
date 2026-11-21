@@ -28,7 +28,13 @@ class Snapshot:
 
 def _git_env(root: Path) -> dict[str, str]:
     empty_config = root / ".gitconfig-empty"
-    empty_config.touch()
+    # No background maintenance after the fixture's commits: on macOS it creates and
+    # deletes .git/objects/maintenance.lock while snapshots are being taken.
+    empty_config.write_text(
+        "[maintenance]\n\tauto = false\n\tautoDetach = false\n"
+        "[gc]\n\tauto = 0\n\tautoDetach = false\n",
+        encoding="utf-8",
+    )
     env = dict(os.environ)
     env.update(
         {
