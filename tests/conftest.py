@@ -24,7 +24,11 @@ def isolated_git_config(tmp_path_factory: pytest.TempPathFactory) -> Iterator[No
     home = tmp_path_factory.mktemp("githome")
     empty = home / ".gitconfig"
     empty.write_text(
-        '[protocol "file"]\n\tallow = always\n[init]\n\tdefaultBranch = main\n',
+        '[protocol "file"]\n\tallow = always\n[init]\n\tdefaultBranch = main\n'
+        # No background maintenance after fixture commits: on macOS it creates and deletes
+        # .git/objects/maintenance.lock while the read-only tests take their snapshots.
+        "[maintenance]\n\tauto = false\n\tautoDetach = false\n"
+        "[gc]\n\tauto = 0\n\tautoDetach = false\n",
         encoding="utf-8",
     )
     saved = dict(os.environ)

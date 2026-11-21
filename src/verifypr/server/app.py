@@ -270,6 +270,10 @@ def _branches(root: Path) -> list[str]:
         [
             "git",
             "--no-optional-locks",
+            "-c",
+            "gc.auto=0",
+            "-c",
+            "maintenance.auto=false",
             "for-each-ref",
             "--format=%(refname:short)",
             "refs/heads",

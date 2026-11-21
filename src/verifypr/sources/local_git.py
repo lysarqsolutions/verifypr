@@ -3,9 +3,10 @@
 Public interface: ``CompareOptions``, ``LocalGit.open(path)``, ``LocalGit.collect(options)``.
 
 Every git call goes through ``LocalGit._run``, which uses ``--no-optional-locks`` so even
-``git status`` never rewrites the index. Only read commands are used (``rev-parse``,
-``diff``, ``ls-files``, ``ls-tree``, ``cat-file``, ``merge-base``, ``rev-list``, ``status``,
-``symbolic-ref``, ``config --get``, ``log``). No command here may write to the repo or ``.git``.
+``git status`` never rewrites the index, and turns off automatic maintenance/gc.
+Only read commands are used (``rev-parse``, ``diff``, ``ls-files``, ``ls-tree``,
+``cat-file``, ``merge-base``, ``rev-list``, ``status``, ``symbolic-ref``, ``config --get``,
+``log``). No command here may write to the repo or ``.git``.
 """
 
 from __future__ import annotations
@@ -30,6 +31,11 @@ _LFS_HEADER = b"version https://git-lfs.github.com/spec/v1"
 _GIT_PREFIX = (
     "git",
     "--no-optional-locks",
+    # Never start git's automatic background maintenance/gc (it writes to .git).
+    "-c",
+    "gc.auto=0",
+    "-c",
+    "maintenance.auto=false",
     "-c",
     "core.quotepath=off",
     "-c",
