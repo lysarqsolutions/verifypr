@@ -87,7 +87,9 @@ class KeyCheck:
 
 # Known key shapes. Only a warning on mismatch: providers add new formats over time.
 _KEY_PREFIXES = {
-    "anthropic": ("sk-ant-api", "Anthropic API keys start with sk-ant-api"),
+    # Anthropic has several key kinds (sk-ant-api03-…, user-linked sk-ant-usr-…, …): only
+    # the shared prefix is checked.
+    "anthropic": ("sk-ant-", "Anthropic API keys start with sk-ant-"),
     "openai": ("sk-", "OpenAI API keys start with sk-"),
     "openrouter": ("sk-or-", "OpenRouter keys start with sk-or-"),
 }
@@ -113,11 +115,8 @@ def check_key(provider: str, key: str) -> KeyCheck:
         return KeyCheck(error="That key is too short to be an API key. Check it was copied fully.")
     known = _KEY_PREFIXES.get(provider)
     if known and not key.startswith(known[0]):
-        hint = ""
-        if provider == "anthropic" and key.startswith("sk-ant-"):
-            hint = " This looks like a different kind of Anthropic token, not an API key."
         return KeyCheck(
-            warning=f"That doesn't look like an API key for this provider: {known[1]}.{hint} "
+            warning=f"That doesn't look like an API key for this provider: {known[1]}. "
             "Create one on the provider's API keys page."
         )
     return KeyCheck()

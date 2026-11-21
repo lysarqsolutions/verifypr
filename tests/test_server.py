@@ -448,6 +448,6 @@ def test_page_refuses_mangled_keys_and_warns_on_odd_ones(repo_dir: Path) -> None
     assert res.status_code == 400
     assert "pasted twice" in res.json()["error"]
     assert good not in res.text
-    odd = client.post("/api/key", json={"provider": "anthropic", "key": "sk-ant-usr-" + "x" * 90})
+    odd = client.post("/api/key", json={"provider": "anthropic", "key": "sk-proj-" + "x" * 90})
     assert odd.status_code == 200
     assert "Test connection" in odd.json()["note"]

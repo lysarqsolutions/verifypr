@@ -226,15 +226,16 @@ def test_broken_keys_are_refused(key: str, problem: str) -> None:
     assert GOOD_KEY not in result.error
 
 
-def test_other_anthropic_tokens_get_a_warning() -> None:
-    from verifypr.llm.keys import check_key
+def test_every_kind_of_anthropic_key_is_accepted_and_others_get_a_warning() -> None:
+    from verifypr.llm.keys import KeyCheck, check_key
 
-    result = check_key("anthropic", "sk-ant-usr-" + "x" * 90)
-    assert result.error is None
-    assert result.warning is not None
-    assert "start with sk-ant-api" in result.warning
-    assert "different kind of Anthropic token" in result.warning
-    assert check_key("anthropic", GOOD_KEY) == type(result)()
+    # Console keys come in several kinds, e.g. user-linked sk-ant-usr- keys.
+    assert check_key("anthropic", GOOD_KEY) == KeyCheck()
+    assert check_key("anthropic", "sk-ant-usr-" + "x" * 90) == KeyCheck()
+    odd = check_key("anthropic", "sk-proj-" + "x" * 60)
+    assert odd.error is None
+    assert odd.warning is not None
+    assert "start with sk-ant-" in odd.warning
     assert check_key("azure", "0123456789abcdef" * 2).warning is None
 
 
@@ -250,7 +251,7 @@ def test_key_set_refuses_a_mangled_paste_and_saves_nothing() -> None:
 def test_key_set_asks_before_saving_an_odd_looking_key() -> None:
     from verifypr.llm.keys import resolve_key
 
-    odd = "sk-ant-usr-" + "x" * 90
+    odd = "sk-proj-" + "x" * 90
     declined = runner.invoke(app, ["key", "set"], input=odd + "\nn\n")
     assert declined.exit_code == 3
     assert resolve_key("anthropic")[0] is None
