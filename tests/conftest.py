@@ -93,4 +93,6 @@ def pytest_runtest_logreport(report: pytest.TestReport) -> None:
     text = str(report.longrepr).strip().splitlines()
     tail = " | ".join(text[-6:])[:900]
     tail = tail.replace("%", "%25").replace("\r", "").replace("\n", " ")
-    print(f"\n::error file={path},line={(line or 0) + 1},title={report.nodeid}::{tail}")
+    title = report.nodeid.replace("::", " - ").replace(",", "%2C")
+    where = path.replace("\\", "/")
+    print(f"\n::error file={where},line={(line or 0) + 1},title={title}::{tail}")
